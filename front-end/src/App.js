@@ -7,7 +7,7 @@ import "react-toastify/dist/ReactToastify.css";
 import Navbar from "./componentes/interfaz/Navbar";
 
 // Páginas
-import DatosDelSostenedor from "./paginas/Sostenedor/DatosDelSostenedor";
+import MenuPrincipal from "./paginas/Sostenedor/MenuPrincipal";
 import Establecimientos from "./paginas/Establecimientos/Establecimientos";
 import EstructuraDeCurso from "./paginas/Establecimientos/EstructuraDeCurso";
 import Cursos from "./paginas/cursos/Cursos";
@@ -26,6 +26,8 @@ import Usuarios from "./paginas/usuarios/Usuarios";
 import EvaluacionPsicoForm from "./paginas/psicopedagogica/EvaluacionPsicoForm";
 import EvaluacionPsicopedagogica from "./paginas/psicopedagogica/EvaluacionPsicopedagogica";
 import SaludForm from "./paginas/salud/SaludForm";
+import Anamnesis from "./paginas/Anamnesis/Anamnesis";
+import InformeFamilia from "./paginas/InformesFamilia/InformeFamilia";
 
 // Contexto de autenticación
 import { AuthProvider, useAuth } from "./contexto/AuthContext";
@@ -149,6 +151,16 @@ export default function App() {
               }
             />
 
+            {/* Anamnesis */}
+            <Route
+              path="/anamnesis"
+              element={
+                <ProtectedRoute>
+                  <Anamnesis />
+                </ProtectedRoute>
+              }
+            />
+
             {/* Evaluación de Salud */}
             <Route
               path="/evaluacion-salud"
@@ -164,17 +176,17 @@ export default function App() {
               path="/informes-familia"
               element={
                 <ProtectedRoute>
-                  <div className="container py-4"><h2>Informes para la familia</h2><p>Página de informes (implementa aquí tu componente)</p></div>
+                  <InformeFamilia />
                 </ProtectedRoute>
               }
             />
 
-            {/* Sostenedor */}
+            {/* Menú principal */}
             <Route
               path="/sostenedor"
               element={
                 <ProtectedRoute>
-                  <DatosDelSostenedor />
+                  <MenuPrincipal />
                 </ProtectedRoute>
               }
             />

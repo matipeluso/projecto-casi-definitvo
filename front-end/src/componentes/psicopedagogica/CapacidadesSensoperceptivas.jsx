@@ -1,28 +1,21 @@
 import React from "react";
+import {
+  SUBDIMENSION_COMMENT_FIELDS,
+  SUBDIMENSION_LOOKUP_BY_SLUG,
+} from "./subdimensionCatalog";
 
-const ITEMS = [
-  "Responde cuando se le habla con volumen de voz natural.",
-  "Repite las rimas, canciones, refranes, dichos que se le enseñan.",
-  "Responde a mensajes orales simples.",
-  "Identifica y localiza la fuente de sonido en el medio ambiente.",
-  "En conversaciones grupales espontáneas, mira o atiende hacia la persona que habla.",
-  "Se expresa a través de actividades musicales.",
-  "Se expresa a través de actividades plásticas.",
-  "En actividades que requieren del uso de lectura y escritura necesita acercarse a los textos o al pizarrón.",
-  "Se desplaza evitando obstáculos presentes en el trayecto.",
-  "Distingue imágenes, textos, colores.",
-  "Responde a gestos o señas comunicativas de otros.",
-];
+const SECTION = SUBDIMENSION_LOOKUP_BY_SLUG["capacidades-sensoperceptivas"];
+const DEFAULT_ITEMS = SECTION?.items ?? [];
+const OPTIONS = [1, 2, 3, 4, 0];
 
-const OPTIONS = ["1", "2", "3", "4", "0"];
-const COMMENT_PROMPTS = [
-  "Describa la mayor fortaleza del estudiante en esta área (y contexto en que se manifiesta)",
-  "Describa la mayor debilidad del estudiante en esta área (y contexto en que se manifiesta)",
-  "Síntesis: Señale el desempeño general del estudiante en esta área",
-  "Observaciones (señale aspectos o antecedentes no considerados o que usted crea importante relevar o complementar)",
-];
-
-export default function CapacidadesSensoperceptivas() {
+export default function CapacidadesSensoperceptivas({
+  values = [],
+  comentarios = {},
+  disabled = false,
+  onValorChange,
+  onComentarioChange,
+}) {
+  const items = values.length ? values : DEFAULT_ITEMS;
   return (
     <div className="container mb-4">
       <div className="border rounded p-4 bg-white">
@@ -41,17 +34,29 @@ export default function CapacidadesSensoperceptivas() {
               </tr>
             </thead>
             <tbody>
-              {ITEMS.map((texto, index) => {
-                const name = `sensoperceptiva_${index + 1}`;
+              {items.map((item, index) => {
+                const name = `sensoperceptiva_${item.numero || index + 1}`;
                 return (
                   <tr key={name}>
-                    <td className="text-center fw-bold">{index + 1}</td>
-                    <td>{texto}</td>
-                    {OPTIONS.map((valor) => (
-                      <td key={`${name}-${valor}`} className="text-center">
-                        <input type="radio" name={name} value={valor} className="form-check-input" />
-                      </td>
-                    ))}
+                    <td className="text-center fw-bold">{item.numero || index + 1}</td>
+                    <td>{item.descripcion || item}</td>
+                    {OPTIONS.map((valor) => {
+                      const numericValue = Number(valor);
+                      const checked = Number(item.valor) === numericValue;
+                      return (
+                        <td key={`${name}-${valor}`} className="text-center">
+                          <input
+                            type="radio"
+                            name={name}
+                            value={numericValue}
+                            className="form-check-input"
+                            checked={checked}
+                            onChange={() => onValorChange?.(index, numericValue)}
+                            disabled={disabled}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
@@ -59,10 +64,16 @@ export default function CapacidadesSensoperceptivas() {
           </table>
         </div>
         <section className="row g-3">
-          {COMMENT_PROMPTS.map((label) => (
-            <div className="col-12" key={label}>
+          {SUBDIMENSION_COMMENT_FIELDS.map(({ field, label, rows }) => (
+            <div className="col-12" key={field}>
               <label className="form-label">{label}</label>
-              <textarea className="form-control" rows={label.includes("Síntesis") ? 2 : 3} />
+              <textarea
+                className="form-control"
+                rows={rows}
+                value={comentarios?.[field] || ""}
+                onChange={(event) => onComentarioChange?.(field, event.target.value)}
+                disabled={disabled}
+              />
             </div>
           ))}
         </section>

@@ -1,25 +1,21 @@
 import React from "react";
+import {
+  SUBDIMENSION_COMMENT_FIELDS,
+  SUBDIMENSION_LOOKUP_BY_SLUG,
+} from "./subdimensionCatalog";
 
-const ITEMS = [
-  "Se comunica e interactúa con los demás de manera espontánea.",
-  "Se comunica e interactúa con los demás de manera guiada.",
-  "Participa en conversaciones con sus pares y/o adultos de forma espontánea.",
-  "La pronunciación, orden y estructura gramatical de sus expresiones verbales/en lengua de señas favorecen la comprensión del mensaje.",
-  "Utiliza oraciones completas en intervenciones orales/en lengua de señas.",
-  "Relata en forma secuenciada y clara experiencias personales.",
-  "Realiza y cumple instrucciones entregadas oralmente/en lengua de señas.",
-  "Ajusta su lenguaje a diversos contextos e interlocutores.",
-  "Su expresión oral es rítmica y con una melodía; su expresión manual es rítmica, con fluidez de señalización, y coherente con la expresión facial y corporal (prosodia).",
-  "Utiliza palabras/señas y conceptos rebuscados.",
-  "El volumen de su voz/claridad en la señalización, se ajusta a las diversas situaciones y/o contextos.",
-  "Conoce y usa un vocabulario amplio.",
-  "Comunica sensaciones, experiencias, emociones, necesidades e ideas a través del lenguaje oral/lengua de señas.",
-  "Repite frecuentemente palabras/señas u oraciones (ecolalia).",
-];
+const SECTION = SUBDIMENSION_LOOKUP_BY_SLUG["habilidades-comunicativas"];
+const DEFAULT_ITEMS = SECTION?.items ?? [];
+const OPTIONS = [1, 2, 3, 4, 0];
 
-const OPTIONS = ["1", "2", "3", "4", "0"];
-
-export default function HabilidadesComunicativas() {
+export default function HabilidadesComunicativas({
+  values = [],
+  comentarios = {},
+  disabled = false,
+  onValorChange,
+  onComentarioChange,
+}) {
+  const items = values.length ? values : DEFAULT_ITEMS;
   return (
     <div className="container mb-4">
       <div className="border rounded p-4 bg-white">
@@ -38,17 +34,29 @@ export default function HabilidadesComunicativas() {
               </tr>
             </thead>
             <tbody>
-              {ITEMS.map((texto, index) => {
-                const name = `comunicacion_${index + 1}`;
+              {items.map((item, index) => {
+                const name = `comunicacion_${item.numero || index + 1}`;
                 return (
                   <tr key={name}>
-                    <td className="text-center fw-bold">{index + 1}</td>
-                    <td>{texto}</td>
-                    {OPTIONS.map((valor) => (
-                      <td key={`${name}-${valor}`} className="text-center">
-                        <input type="radio" name={name} value={valor} className="form-check-input" />
-                      </td>
-                    ))}
+                    <td className="text-center fw-bold">{item.numero || index + 1}</td>
+                    <td>{item.descripcion || item}</td>
+                    {OPTIONS.map((valor) => {
+                      const numericValue = Number(valor);
+                      const checked = Number(item.valor) === numericValue;
+                      return (
+                        <td key={`${name}-${valor}`} className="text-center">
+                          <input
+                            type="radio"
+                            name={name}
+                            value={numericValue}
+                            className="form-check-input"
+                            checked={checked}
+                            onChange={() => onValorChange?.(index, numericValue)}
+                            disabled={disabled}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
@@ -56,15 +64,16 @@ export default function HabilidadesComunicativas() {
           </table>
         </div>
         <section className="row g-3">
-          {[
-            "Describa la mayor fortaleza del estudiante en esta área (y contexto en que se manifiesta)",
-            "Describa la mayor debilidad del estudiante en esta área (y contexto en que se manifiesta)",
-            "Síntesis: Señale el desempeño general del estudiante en esta área",
-            "Observaciones (señale aspectos o antecedentes no considerados o que usted crea importante relevar o complementar)",
-          ].map((label) => (
-            <div className="col-12" key={label}>
+          {SUBDIMENSION_COMMENT_FIELDS.map(({ field, label, rows }) => (
+            <div className="col-12" key={field}>
               <label className="form-label">{label}</label>
-              <textarea className="form-control" rows={label.includes("Síntesis") ? 2 : 3} />
+              <textarea
+                className="form-control"
+                rows={rows}
+                value={comentarios?.[field] || ""}
+                onChange={(event) => onComentarioChange?.(field, event.target.value)}
+                disabled={disabled}
+              />
             </div>
           ))}
         </section>

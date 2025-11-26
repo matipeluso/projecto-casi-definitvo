@@ -1,37 +1,30 @@
-back-end-backup# ======== Django Core ========
+
+# Django Core
 Django==5.0.7
 
-# ======== Django REST Framework ========
+# Django REST Framework
 djangorestframework==3.15.2
 django-cors-headers==4.3.1
 
-# ======== PDF & Archivos ========
+# PDF & Archivos
 reportlab==4.4.4
 xhtml2pdf==0.2.7
-pillow==10.4.0
+Pillow==10.4.0
 
-# ======== MySQL Client ========
-mysqlclient==3.1.4
+# MySQL Client
+mysqlclient==2.2.7
 
-# ======== Utilidades adicionales ========
-crispy-bootstrap5==1.1.0
-django-crispy-forms==1.14.3
+# Utilidades adicionales
+crispy-bootstrap5==2025.6
+django-crispy-forms==2.3
 django-bootstrap5==24.3
 
-# ======== Servidor & Compatibilidad ========
+# Servidor & Compatibilidad
 gunicorn==22.0.0
 
-# ======== AWS & Cloud (Opcional, por si automatizas backups, S3, etc.) ========
+# AWS & Cloud (Opcional)
 boto3==1.35.5
 botocore==1.35.5
 
-# ======== Otros ========
+# Otros
 charset-normalizer==3.3.2
-
-
-
-django
-djangorestframework
-django-cors-headers
-reportlab
-mysqlclient

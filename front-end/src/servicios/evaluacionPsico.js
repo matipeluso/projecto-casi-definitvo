@@ -35,3 +35,10 @@ export async function eliminarEvaluacionPsico(id) {
   return res.data;
 }
 
+export async function descargarPdfEvaluacion(id) {
+  const res = await api.get(`${RESOURCE}${id}/descargar-pdf/`, {
+    responseType: "blob",
+  });
+  return res.data;
+}
+

@@ -13,6 +13,11 @@ export const registrosPIEApi = {
   create: (payload) => api.post("/registros-pie/", payload),
   update: (id, payload) => api.patch(`/registros-pie/${id}/`, payload),
   remove: (id) => api.delete(`/registros-pie/${id}/`),
+  downloadPdf: (id, config = {}) =>
+    api.get(`/registros-pie/${id}/descargar-pdf/`, {
+      responseType: "blob",
+      ...config,
+    }),
 };
 
 export const equipoAulaApi = crudFactory("/equipo-aula/");

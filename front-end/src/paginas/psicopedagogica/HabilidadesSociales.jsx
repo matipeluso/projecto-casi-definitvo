@@ -1,32 +1,21 @@
 import React from "react";
+import {
+  SUBDIMENSION_COMMENT_FIELDS,
+  SUBDIMENSION_LOOKUP_BY_SLUG,
+} from "../../componentes/psicopedagogica/subdimensionCatalog";
 
-const ITEMS = [
-  "Expresa verbal y/o corporalmente distintas emociones y sentimientos.",
-  "Comparte con sus compañeros trabajo y/o actividades recreativas.",
-  "Se relaciona afectivamente con los adultos de su medio.",
-  "Se expresa con seguridad y confianza.",
-  "Expresa sus sentimientos y emociones de acuerdo a la situación y contexto.",
-  "Espera su turno en actividades grupales.",
-  "Distingue que los comportamientos pueden producir consecuencias positivas o negativas.",
-  "Expresa y reconoce distintas emociones y sentimientos en sí mismo y en los otros.",
-  "Ajusta su actividad motriz a las exigencias del contexto y situación.",
-  "Ante una dificultad o impedimento busca alternativas de solución.",
-  "Inicia actividades de trabajo y/o recreativas.",
-  "Utiliza diversos recursos para comunicarse e interactuar con su medio.",
-  "Se muestra activo e interesado por su entorno.",
-  "Solicita ayuda cuando la requiere.",
-  "Acepta críticas y aportes en sus trabajos.",
-];
+const SECTION = SUBDIMENSION_LOOKUP_BY_SLUG["habilidades-sociales-afectividad"];
+const DEFAULT_ITEMS = SECTION?.items ?? [];
+const OPTIONS = [1, 2, 3, 4, 0];
 
-const OPTIONS = ["1", "2", "3", "4", "0"];
-const COMMENT_PROMPTS = [
-  "Describa la mayor fortaleza del estudiante en esta área (y contexto en que se manifiesta)",
-  "Describa la mayor debilidad del estudiante en esta área (y contexto en que se manifiesta)",
-  "Síntesis: Señale el desempeño general del estudiante en esta área",
-  "Observaciones (señale aspectos o antecedentes no considerados o que usted crea importante relevar o complementar)",
-];
-
-export default function HabilidadesSociales() {
+export default function HabilidadesSociales({
+  values = [],
+  comentarios = {},
+  disabled = false,
+  onValorChange,
+  onComentarioChange,
+}) {
+  const items = values.length ? values : DEFAULT_ITEMS;
   return (
     <div className="bg-white py-4">
       <div className="container">
@@ -70,17 +59,29 @@ export default function HabilidadesSociales() {
                 </tr>
               </thead>
               <tbody>
-                {ITEMS.map((texto, index) => {
-                  const name = `social_${index + 1}`;
+                {items.map((item, index) => {
+                  const name = `social_${item.numero || index + 1}`;
                   return (
                     <tr key={name}>
-                      <td className="text-center fw-bold">{index + 1}</td>
-                      <td>{texto}</td>
-                      {OPTIONS.map((valor) => (
-                        <td key={`${name}-${valor}`} className="text-center">
-                          <input type="radio" name={name} value={valor} className="form-check-input" />
-                        </td>
-                      ))}
+                      <td className="text-center fw-bold">{item.numero || index + 1}</td>
+                      <td>{item.descripcion || item}</td>
+                      {OPTIONS.map((valor) => {
+                        const numericValue = Number(valor);
+                        const checked = Number(item.valor) === numericValue;
+                        return (
+                          <td key={`${name}-${valor}`} className="text-center">
+                            <input
+                              type="radio"
+                              name={name}
+                              value={numericValue}
+                              className="form-check-input"
+                              checked={checked}
+                              onChange={() => onValorChange?.(index, numericValue)}
+                              disabled={disabled}
+                            />
+                          </td>
+                        );
+                      })}
                     </tr>
                   );
                 })}
@@ -89,23 +90,18 @@ export default function HabilidadesSociales() {
           </div>
 
           <section className="row g-3 mb-4">
-            {COMMENT_PROMPTS.map((label) => (
-              <div className="col-12" key={label}>
+            {SUBDIMENSION_COMMENT_FIELDS.map(({ field, label, rows }) => (
+              <div className="col-12" key={field}>
                 <label className="form-label">{label}</label>
-                <textarea className="form-control" rows={label.includes("Síntesis") ? 2 : 3} />
+                <textarea
+                  className="form-control"
+                  rows={rows}
+                  value={comentarios?.[field] || ""}
+                  onChange={(event) => onComentarioChange?.(field, event.target.value)}
+                  disabled={disabled}
+                />
               </div>
             ))}
-          </section>
-
-          <section className="row g-3 mb-3">
-            <div className="col-md-6">
-              <label className="form-label">Nombre evaluador/a</label>
-              <input type="text" className="form-control" />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">Fecha y firma</label>
-              <input type="date" className="form-control" />
-            </div>
           </section>
 
           <footer className="text-muted small">

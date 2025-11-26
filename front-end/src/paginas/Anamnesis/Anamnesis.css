@@ -1,0 +1,55 @@
+.anamnesis-page {
+  background-color: #f6f7fb;
+}
+
+.anamnesis-form .section-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #0b4f6c;
+  margin-bottom: 0.75rem;
+  text-transform: uppercase;
+}
+
+.anamnesis-section + .anamnesis-section {
+  margin-top: 2rem;
+}
+
+.anamnesis-subsection {
+  border: 1px solid #e0e5ec;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background-color: #fff;
+}
+
+.subsection-title {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: #cf5a02;
+  margin-bottom: 1rem;
+}
+
+.anamnesis-table th {
+  background-color: #f2f6fb;
+  width: 15%;
+}
+
+.anamnesis-table td,
+.anamnesis-table th {
+  vertical-align: middle;
+  font-size: 0.9rem;
+}
+
+.anamnesis-section textarea {
+  resize: vertical;
+}
+
+.anamnesis-subsection .form-label {
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.anamnesis-subsection table th,
+.anamnesis-subsection table td {
+  font-size: 0.85rem;
+}

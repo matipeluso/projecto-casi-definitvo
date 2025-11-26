@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   actualizarEvaluacionPsico,
   crearEvaluacionPsico,
@@ -11,6 +11,22 @@ import {
   ESTRATEGIAS_CATALOG,
   APOYOS_CATALOG,
 } from "../paginas/psicopedagogica/catalogos";
+import { listarSubdimensionAreas } from "../servicios/subdimensionAreas";
+import {
+  SUBDIMENSION_SECTIONS,
+  SUBDIMENSION_DESCRIPTION_LOOKUP,
+  SUBDIMENSION_COMMENT_FIELDS,
+  normalizeSubdimensionSlug,
+  normalizeSubdimensionText,
+} from "../componentes/psicopedagogica/subdimensionCatalog";
+
+const COMMENT_FIELDS = SUBDIMENSION_COMMENT_FIELDS.map(({ field }) => field);
+
+const buildEmptyComentarios = () =>
+  COMMENT_FIELDS.reduce((acc, field) => {
+    acc[field] = "";
+    return acc;
+  }, {});
 
 const normalizeSmallInt = (value) => {
   if (value === null || typeof value === "undefined" || value === "") {
@@ -96,6 +112,98 @@ const mergeApoyosState = (records = []) => {
   return next;
 };
 
+const buildSubdimensionPayloads = (subdimensiones = {}, areaLookup = { bySlug: {} }) => {
+  const items = [];
+  const comentarios = [];
+  const bySlug = areaLookup.bySlug || {};
+
+  Object.entries(subdimensiones).forEach(([slug, section]) => {
+    if (!section) return;
+    const areaId = bySlug[slug]?.id;
+    if (!areaId) return;
+
+    (section.items || []).forEach((item) => {
+      if (!item) return;
+      if (!Number.isInteger(item.valor)) return;
+      items.push({
+        area: areaId,
+        descripcion: item.descripcion,
+        valor: item.valor,
+      });
+    });
+
+    const comentariosData = section.comentarios || {};
+    const hasTexto = COMMENT_FIELDS.some((field) => {
+      const value = comentariosData[field];
+      return typeof value === "string" && value.trim() !== "";
+    });
+    if (hasTexto) {
+      comentarios.push({
+        area: areaId,
+        fortaleza: comentariosData.fortaleza || "",
+        debilidad: comentariosData.debilidad || "",
+        sintesis: comentariosData.sintesis || "",
+        observaciones: comentariosData.observaciones || "",
+      });
+    }
+  });
+
+  return { items, comentarios };
+};
+
+const buildSubdimensionState = () =>
+  SUBDIMENSION_SECTIONS.reduce((acc, section) => {
+    acc[section.slug] = {
+      slug: section.slug,
+      items: section.items.map((item) => ({ ...item, valor: null })),
+      comentarios: buildEmptyComentarios(),
+    };
+    return acc;
+  }, {});
+
+const mergeSubdimensionState = (
+  itemRecords = [],
+  comentarioRecords = [],
+  areaLookup = { byId: {}, bySlug: {} }
+) => {
+  const base = buildSubdimensionState();
+  const byId = areaLookup.byId || {};
+
+  itemRecords.forEach((record) => {
+    if (!record) return;
+    let slug = record.area ? byId[record.area]?.slug : null;
+    if (!slug) {
+      const normalized = normalizeSubdimensionText(record.descripcion || "");
+      slug = SUBDIMENSION_DESCRIPTION_LOOKUP[normalized]?.slug;
+    }
+    if (!slug || !base[slug]) return;
+    const normalizedDescripcion = normalizeSubdimensionText(record.descripcion || "");
+    const targetIndex = base[slug].items.findIndex(
+      (item) => item.descripcionNorm === normalizedDescripcion
+    );
+    if (targetIndex === -1) return;
+    base[slug].items[targetIndex] = {
+      ...base[slug].items[targetIndex],
+      valor: Number.isInteger(record.valor) ? record.valor : null,
+    };
+  });
+
+  comentarioRecords.forEach((record) => {
+    if (!record) return;
+    const slug = record.area ? byId[record.area]?.slug : null;
+    if (!slug || !base[slug]) return;
+    base[slug].comentarios = {
+      ...buildEmptyComentarios(),
+      fortaleza: record.fortaleza || "",
+      debilidad: record.debilidad || "",
+      sintesis: record.sintesis || "",
+      observaciones: record.observaciones || "",
+    };
+  });
+
+  return base;
+};
+
 const buildBaseForm = ({ estudiante = "", evaluador_usuario = null } = {}) => ({
   estudiante,
   evaluador_usuario,
@@ -104,8 +212,10 @@ const buildBaseForm = ({ estudiante = "", evaluador_usuario = null } = {}) => ({
   subsectores: buildSubsectorState(),
   estrategias: buildEstrategiaState(),
   apoyos: buildApoyosState(),
+  subdimensiones: buildSubdimensionState(),
   edad_anios: "",
   edad_meses: "",
+  fecha_evaluacion: "",
   lengua_materna_grado: "",
   lengua_materna_comprende: false,
   lengua_materna_habla: false,
@@ -142,6 +252,9 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
   const [estudianteActual, setEstudianteActual] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const subdimensionAreasRef = useRef({ byId: {}, bySlug: {} });
+  const areasPromiseRef = useRef(null);
+  const [areasLoaded, setAreasLoaded] = useState(false);
 
   useEffect(() => {
     if (!evaluadorUsuarioId) return;
@@ -151,6 +264,59 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
     }));
   }, [evaluadorUsuarioId]);
 
+  const fetchAreas = useCallback(() => {
+    if (areasLoaded) {
+      return Promise.resolve(subdimensionAreasRef.current);
+    }
+    if (areasPromiseRef.current) {
+      return areasPromiseRef.current;
+    }
+    const request = listarSubdimensionAreas({ page_size: 100 })
+      .then((payload) => {
+        const lista = Array.isArray(payload) ? payload : payload?.results ?? [];
+        const byId = {};
+        const bySlug = {};
+        lista.forEach((area) => {
+          if (!area) return;
+          const slug = normalizeSubdimensionSlug(area.slug || area.nombre || "");
+          if (!slug) return;
+          const record = { ...area, slug };
+          if (area.id) {
+            byId[area.id] = record;
+          }
+          bySlug[slug] = record;
+        });
+        const lookup = { byId, bySlug };
+        subdimensionAreasRef.current = lookup;
+        setAreasLoaded(true);
+        return lookup;
+      })
+      .catch((error) => {
+        console.error("[useEvaluacionPsico] Error cargando subdimensiones", error);
+        throw error;
+      });
+
+    areasPromiseRef.current = request
+      .then((result) => {
+        areasPromiseRef.current = null;
+        return result;
+      })
+      .catch((error) => {
+        areasPromiseRef.current = null;
+        throw error;
+      });
+    return areasPromiseRef.current;
+  }, [areasLoaded]);
+
+  useEffect(() => {
+    fetchAreas().catch(() => {});
+  }, [fetchAreas]);
+
+  const ensureAreasReady = useCallback(async () => {
+    if (areasLoaded) return;
+    await fetchAreas();
+  }, [areasLoaded, fetchAreas]);
+
   const resetForm = useCallback(
     (estudianteId = "") => {
       setForm(buildBaseForm({ estudiante: estudianteId, evaluador_usuario: evaluadorUsuarioId || null }));
@@ -159,7 +325,8 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
   );
 
   const hydrateFromResponse = useCallback(
-    (payload, fallbackEstudiante) => {
+    (payload, fallbackEstudiante, areaLookupParam) => {
+      const areaLookup = areaLookupParam || subdimensionAreasRef.current;
       if (!payload) {
         resetForm(fallbackEstudiante);
         setEvaluacionId(null);
@@ -170,6 +337,7 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
         estudiante: payload.estudiante ?? fallbackEstudiante ?? "",
         evaluador_usuario: payload.evaluador_usuario ?? evaluadorUsuarioId ?? null,
         observaciones: payload.observaciones || "",
+        fecha_evaluacion: payload.fecha_evaluacion || payload.fecha || "",
         edad_anios:
           payload.edad_anios === null || typeof payload.edad_anios === "undefined"
             ? ""
@@ -192,6 +360,11 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
         subsectores: mergeSubsectorState(payload.subsectores || []),
         estrategias: mergeEstrategiasState(payload.estrategias_apoyo || []),
         apoyos: mergeApoyosState(payload.apoyos_adicionales || []),
+        subdimensiones: mergeSubdimensionState(
+          payload.items || [],
+          payload.comentarios_subdimension || [],
+          areaLookup
+        ),
       });
     },
     [evaluadorUsuarioId, resetForm]
@@ -206,14 +379,15 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
       }
       setIsLoading(true);
       try {
+        await ensureAreasReady();
         const evaluacion = await obtenerEvaluacionPorEstudiante(estudianteId);
-        hydrateFromResponse(evaluacion, estudianteId);
+        hydrateFromResponse(evaluacion, estudianteId, subdimensionAreasRef.current);
         return evaluacion;
       } finally {
         setIsLoading(false);
       }
     },
-    [hydrateFromResponse]
+    [ensureAreasReady, hydrateFromResponse]
   );
 
   const updateField = useCallback((field, value) => {
@@ -301,6 +475,51 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
     }));
   }, []);
 
+  const updateSubdimensionItemValue = useCallback((slug, itemIndex, valor) => {
+    if (!slug || typeof itemIndex !== "number") return;
+    setForm((prev) => {
+      const currentSections = prev.subdimensiones || {};
+      const section = currentSections[slug];
+      if (!section) return prev;
+      const itemsSource = Array.isArray(section.items) ? section.items : [];
+      const items = itemsSource.map((item, index) =>
+        index === itemIndex ? { ...item, valor: Number.isInteger(valor) ? valor : null } : item
+      );
+      return {
+        ...prev,
+        subdimensiones: {
+          ...currentSections,
+          [slug]: {
+            ...section,
+            items,
+          },
+        },
+      };
+    });
+  }, []);
+
+  const updateSubdimensionComentario = useCallback((slug, field, texto) => {
+    if (!slug || !COMMENT_FIELDS.includes(field)) return;
+    setForm((prev) => {
+      const currentSections = prev.subdimensiones || {};
+      const section = currentSections[slug];
+      if (!section) return prev;
+      return {
+        ...prev,
+        subdimensiones: {
+          ...currentSections,
+          [slug]: {
+            ...section,
+            comentarios: {
+              ...(section.comentarios || buildEmptyComentarios()),
+              [field]: texto,
+            },
+          },
+        },
+      };
+    });
+  }, []);
+
   const observacionesSeleccionadas = useMemo(
     () =>
       form.observaciones_ambiente
@@ -361,6 +580,7 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
     if (!estudianteActual) {
       throw new Error("Debes seleccionar un estudiante antes de guardar.");
     }
+    await ensureAreasReady();
     setIsSaving(true);
     try {
       const payload = {
@@ -372,6 +592,8 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
       }
       payload.edad_anios = normalizeSmallInt(form.edad_anios);
       payload.edad_meses = normalizeSmallInt(form.edad_meses);
+      payload.fecha_evaluacion = form.fecha_evaluacion || null;
+      payload.fecha = form.fecha_evaluacion || null;
       payload.lengua_materna_grado = form.lengua_materna_grado || "";
       payload.lengua_materna_comprende = Boolean(form.lengua_materna_comprende);
       payload.lengua_materna_habla = Boolean(form.lengua_materna_habla);
@@ -386,6 +608,12 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
       payload.subsectores = subsectoresPayload;
       payload.estrategias_apoyo = estrategiasPayload;
       payload.apoyos_adicionales = apoyosPayload;
+      const { items: subdimensionItems, comentarios: subdimensionComentarios } = buildSubdimensionPayloads(
+        form.subdimensiones,
+        subdimensionAreasRef.current
+      );
+      payload.items = subdimensionItems;
+      payload.comentarios_subdimension = subdimensionComentarios;
       let response;
       if (evaluacionId) {
         response = await actualizarEvaluacionPsico(evaluacionId, payload);
@@ -398,10 +626,12 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
       setIsSaving(false);
     }
   }, [
+    ensureAreasReady,
     estudianteActual,
     evaluadorUsuarioId,
     form.evaluador_usuario,
     form.observaciones,
+    form.fecha_evaluacion,
     form.edad_anios,
     form.edad_meses,
     form.lengua_materna_grado,
@@ -414,6 +644,7 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
     form.lengua_uso_habla,
     form.lengua_uso_lee,
     form.lengua_uso_escribe,
+    form.subdimensiones,
     observacionesSeleccionadas,
     subsectoresPayload,
     estrategiasPayload,
@@ -436,6 +667,8 @@ export default function useEvaluacionPsicopedagogica({ evaluadorUsuarioId } = {}
     updateEstrategiaDetalle,
     updateApoyoRecibido,
     updateApoyoDescripcion,
+    updateSubdimensionItemValue,
+    updateSubdimensionComentario,
     resetForm,
     saveEvaluacion,
   };

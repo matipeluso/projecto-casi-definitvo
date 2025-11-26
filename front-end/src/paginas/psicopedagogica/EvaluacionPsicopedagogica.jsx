@@ -46,6 +46,8 @@ export default function EvaluacionPsicopedagogica() {
     updateEstrategiaDetalle,
     updateApoyoRecibido,
     updateApoyoDescripcion,
+    updateSubdimensionItemValue,
+    updateSubdimensionComentario,
     resetForm,
     saveEvaluacion,
   } = useEvaluacionPsicopedagogica({ evaluadorUsuarioId: user?.id });
@@ -130,6 +132,19 @@ export default function EvaluacionPsicopedagogica() {
 
   const puedeEditar = Boolean(estudianteSeleccionado) && !isLoading;
 
+  const buildValorHandler = (slug) => (index, valor) => {
+    if (!puedeEditar || isSaving) return;
+    updateSubdimensionItemValue(slug, index, valor);
+  };
+
+  const buildComentarioHandler = (slug) => (field, value) => {
+    if (!puedeEditar || isSaving) return;
+    updateSubdimensionComentario(slug, field, value);
+  };
+
+  const getSectionValues = (slug) => form.subdimensiones?.[slug]?.items ?? [];
+  const getSectionComentarios = (slug) => form.subdimensiones?.[slug]?.comentarios ?? {};
+
   const handleGuardar = async () => {
     try {
       await saveEvaluacion();
@@ -180,6 +195,8 @@ export default function EvaluacionPsicopedagogica() {
           },
         }}
         onLenguaDominioChange={(field, value) => updateField(field, value)}
+        fechaEvaluacion={form.fecha_evaluacion}
+        onFechaEvaluacionChange={(value) => updateField("fecha_evaluacion", value)}
       />
 
       <div className="container mb-4">
@@ -202,14 +219,62 @@ export default function EvaluacionPsicopedagogica() {
         disabled={!puedeEditar || isSaving}
       />
 
-      <HabilidadesComunicativas />
-      <HabilidadesSociales />
-      <MotricidadCuidado />
-      <AproximacionAprendizaje />
-      <HabilidadesCognitivas />
-      <CapacidadesSensoperceptivas />
-      <LecturaEscritura />
-      <Matematicas />
+      <HabilidadesComunicativas
+        values={getSectionValues("habilidades-comunicativas")}
+        comentarios={getSectionComentarios("habilidades-comunicativas")}
+        disabled={!puedeEditar || isSaving}
+        onValorChange={buildValorHandler("habilidades-comunicativas")}
+        onComentarioChange={buildComentarioHandler("habilidades-comunicativas")}
+      />
+      <HabilidadesSociales
+        values={getSectionValues("habilidades-sociales-afectividad")}
+        comentarios={getSectionComentarios("habilidades-sociales-afectividad")}
+        disabled={!puedeEditar || isSaving}
+        onValorChange={buildValorHandler("habilidades-sociales-afectividad")}
+        onComentarioChange={buildComentarioHandler("habilidades-sociales-afectividad")}
+      />
+      <MotricidadCuidado
+        values={getSectionValues("motricidad-cuidado-personal")}
+        comentarios={getSectionComentarios("motricidad-cuidado-personal")}
+        disabled={!puedeEditar || isSaving}
+        onValorChange={buildValorHandler("motricidad-cuidado-personal")}
+        onComentarioChange={buildComentarioHandler("motricidad-cuidado-personal")}
+      />
+      <AproximacionAprendizaje
+        values={getSectionValues("aproximacion-aprendizaje")}
+        comentarios={getSectionComentarios("aproximacion-aprendizaje")}
+        disabled={!puedeEditar || isSaving}
+        onValorChange={buildValorHandler("aproximacion-aprendizaje")}
+        onComentarioChange={buildComentarioHandler("aproximacion-aprendizaje")}
+      />
+      <HabilidadesCognitivas
+        values={getSectionValues("habilidades-cognitivas")}
+        comentarios={getSectionComentarios("habilidades-cognitivas")}
+        disabled={!puedeEditar || isSaving}
+        onValorChange={buildValorHandler("habilidades-cognitivas")}
+        onComentarioChange={buildComentarioHandler("habilidades-cognitivas")}
+      />
+      <CapacidadesSensoperceptivas
+        values={getSectionValues("capacidades-sensoperceptivas")}
+        comentarios={getSectionComentarios("capacidades-sensoperceptivas")}
+        disabled={!puedeEditar || isSaving}
+        onValorChange={buildValorHandler("capacidades-sensoperceptivas")}
+        onComentarioChange={buildComentarioHandler("capacidades-sensoperceptivas")}
+      />
+      <LecturaEscritura
+        values={getSectionValues("lectura-escritura")}
+        comentarios={getSectionComentarios("lectura-escritura")}
+        disabled={!puedeEditar || isSaving}
+        onValorChange={buildValorHandler("lectura-escritura")}
+        onComentarioChange={buildComentarioHandler("lectura-escritura")}
+      />
+      <Matematicas
+        values={getSectionValues("matematicas")}
+        comentarios={getSectionComentarios("matematicas")}
+        disabled={!puedeEditar || isSaving}
+        onValorChange={buildValorHandler("matematicas")}
+        onComentarioChange={buildComentarioHandler("matematicas")}
+      />
       <Subsectores
         values={form.subsectores}
         onToggle={toggleSubsectorFlag}

@@ -77,7 +77,6 @@ export default function Usuarios() {
       (u.last_name || "").toLowerCase().includes(q) ||
       (u.email || "").toLowerCase().includes(q) ||
       (u.rut || "").toLowerCase().includes(q) ||
-      (u.cargo || "").toLowerCase().includes(q) ||
       (u.especialidad?.nombre || "").toLowerCase().includes(q)
     );
   }, [usuarios, busqueda]);
@@ -100,7 +99,7 @@ export default function Usuarios() {
   }));
 
   const opcionesEspecialidadSelect = [
-    { value: "", label: opcionesEspecialidades.length ? "Seleccione especialidad" : "Sin especialidades" },
+    { value: "", label: opcionesEspecialidades.length ? "Seleccione especialidad" : "Sin especialidades disponibles" },
     ...opcionesEspecialidades,
   ];
   const opcionesEstablecimientoSelect = [
@@ -118,7 +117,6 @@ export default function Usuarios() {
       { name: "email", label: "Email", required: true, col: "col-md-4" },
       { name: "telefono", label: "Teléfono", col: "col-md-2" },
       { name: "rut", label: "RUT", col: "col-md-3", placeholder: "12.345.678-9" },
-      { name: "cargo", label: "Cargo / Rol", col: "col-md-3" },
       {
         name: "tipo", label: "Tipo", type: "select", col: "col-md-2",
         options: [
@@ -132,8 +130,13 @@ export default function Usuarios() {
     comunes.push({
       name: "especialidad_id", label: "Especialidad", type: "select", col: "col-md-6",
       options: opcionesEspecialidadSelect,
-      disabled: opcionesEspecialidades.length === 0,
       required: opcionesEspecialidades.length > 0,
+    });
+    comunes.push({
+      name: "especialidad_nombre",
+      label: "Nueva especialidad (si no existe)",
+      col: "col-md-6",
+      placeholder: "Ej. Psicopedagogía",
     });
     comunes.push({
       name: "establecimiento_id", label: "Establecimiento", type: "select", col: "col-md-6",
@@ -176,10 +179,11 @@ export default function Usuarios() {
     if (out.telefono === "") out.telefono = null;
     if (out.rut === "") out.rut = null;
     if (out.rut) out.rut = out.rut.trim();
-    if (out.cargo === "") out.cargo = null;
-    if (out.cargo) out.cargo = out.cargo.trim();
     if (out.especialidad_id === "") out.especialidad_id = null;
     if (out.establecimiento_id === "") out.establecimiento_id = null;
+    if (typeof out.especialidad_nombre === "string" && out.especialidad_nombre.trim() === "") {
+      delete out.especialidad_nombre;
+    }
     if (out.establecimiento !== undefined) delete out.establecimiento;
 
     // booleans desde selects "true"|"false" o boolean ya
@@ -203,6 +207,7 @@ export default function Usuarios() {
       .then((res) => {
         toast.success("Usuario creado correctamente.");
         cargarUsuarios();
+        cargarCombos();
         return res;
       })
       .catch((err) => {
@@ -244,9 +249,9 @@ export default function Usuarios() {
     return {
       ...u,
       rut: u.rut ?? "",
-      cargo: u.cargo ?? "",
       especialidad_id: u.especialidad?.id ?? "",
       establecimiento_id: u.establecimiento?.id ?? u.establecimiento ?? "",
+      especialidad_nombre: "",
       is_active: u.is_active ? "true" : "false",
       is_staff: u.is_staff ? "true" : "false",
       password: "", // no editamos password aquí
@@ -269,8 +274,8 @@ export default function Usuarios() {
             is_active: "true",
             is_staff: "false",
             rut: "",
-            cargo: "",
             especialidad_id: opcionesEspecialidades[0]?.value ?? "",
+            especialidad_nombre: "",
             establecimiento_id: opcionesEstablecimientos[0]?.value ?? ""
           }}
           transformarValores={transformarValoresUsuario}
@@ -298,7 +303,6 @@ export default function Usuarios() {
               <th>RUT</th>
               <th>Email</th>
               <th>Teléfono</th>
-              <th>Cargo / Rol</th>
               <th>Tipo</th>
               <th>Especialidad</th>
               <th>Establecimiento</th>
@@ -307,9 +311,9 @@ export default function Usuarios() {
           </thead>
           <tbody>
             {cargando ? (
-              <tr><td colSpan={10}>Cargando…</td></tr>
+              <tr><td colSpan={9}>Cargando…</td></tr>
             ) : filtrados.length === 0 ? (
-              <tr><td colSpan={10} className="text-muted">No hay usuarios o sin resultados para “{busqueda}”.</td></tr>
+              <tr><td colSpan={9} className="text-muted">No hay usuarios o sin resultados para “{busqueda}”.</td></tr>
             ) : (
               filtrados.map((u) => {
                 const registroEdicion = prepararRegistroParaEditar(u);
@@ -320,7 +324,6 @@ export default function Usuarios() {
                     <td>{u.rut || "—"}</td>
                     <td>{u.email}</td>
                     <td>{u.telefono || "—"}</td>
-                    <td>{u.cargo || "—"}</td>
                     <td>{u.tipo || "—"}</td>
                     <td>{u.especialidad?.nombre || "—"}</td>
                     <td>{u.establecimiento?.nombre || u.establecimiento || "—"}</td>

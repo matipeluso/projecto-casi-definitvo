@@ -1,31 +1,21 @@
 import React from "react";
+import {
+  SUBDIMENSION_COMMENT_FIELDS,
+  SUBDIMENSION_LOOKUP_BY_SLUG,
+} from "./subdimensionCatalog";
 
-const ITEMS = [
-  "Incorpora espontáneamente información relevante del medio (atención y memoria instrumental).",
-  "Memoriza información utilizando medios auxiliares.",
-  "Retiene y reproduce información.",
-  "Distingue lo esencial de lo accesorio.",
-  "Descompone un todo en sus partes (análisis).",
-  "Construye una totalidad a partir de sus elementos (síntesis).",
-  "Realiza una actividad que contiene diversos pasos.",
-  "Anticipa consecuencias de una situación o fenómeno (razonamiento lógico).",
-  "Transfiere o generaliza lo aprendido a otras situaciones.",
-  "Se adapta a imprevistos o a nuevas rutinas de trabajo.",
-  "Busca estrategias para resolver problemas de la vida diaria.",
-  "Relaciona en base a características instrumentales (de uso) o situacionales de los objetos.",
-  "Distingue rasgos o nexos esenciales comunes en objetos o fenómenos (abstracción).",
-  "Explica (comprende) el significado de una metáfora.",
-];
+const SECTION = SUBDIMENSION_LOOKUP_BY_SLUG["habilidades-cognitivas"];
+const DEFAULT_ITEMS = SECTION?.items ?? [];
+const OPTIONS = [1, 2, 3, 4, 0];
 
-const OPTIONS = ["1", "2", "3", "4", "0"];
-const COMMENT_PROMPTS = [
-  "Describa la mayor fortaleza del estudiante en esta área (y contexto en que se manifiesta)",
-  "Describa la mayor debilidad del estudiante en esta área (y contexto en que se manifiesta)",
-  "Síntesis: Señale el desempeño general del estudiante en esta área",
-  "Observaciones (señale aspectos o antecedentes no considerados o que usted crea importante relevar o complementar)",
-];
-
-export default function HabilidadesCognitivas() {
+export default function HabilidadesCognitivas({
+  values = [],
+  comentarios = {},
+  disabled = false,
+  onValorChange,
+  onComentarioChange,
+}) {
+  const items = values.length ? values : DEFAULT_ITEMS;
   return (
     <div className="container mb-4">
       <div className="border rounded p-4 bg-white">
@@ -44,17 +34,29 @@ export default function HabilidadesCognitivas() {
               </tr>
             </thead>
             <tbody>
-              {ITEMS.map((texto, index) => {
-                const name = `cognitivo_${index + 1}`;
+              {items.map((item, index) => {
+                const name = `cognitivo_${item.numero || index + 1}`;
                 return (
                   <tr key={name}>
-                    <td className="text-center fw-bold">{index + 1}</td>
-                    <td>{texto}</td>
-                    {OPTIONS.map((valor) => (
-                      <td key={`${name}-${valor}`} className="text-center">
-                        <input type="radio" name={name} value={valor} className="form-check-input" />
-                      </td>
-                    ))}
+                    <td className="text-center fw-bold">{item.numero || index + 1}</td>
+                    <td>{item.descripcion || item}</td>
+                    {OPTIONS.map((valor) => {
+                      const numericValue = Number(valor);
+                      const checked = Number(item.valor) === numericValue;
+                      return (
+                        <td key={`${name}-${valor}`} className="text-center">
+                          <input
+                            type="radio"
+                            name={name}
+                            value={numericValue}
+                            className="form-check-input"
+                            checked={checked}
+                            onChange={() => onValorChange?.(index, numericValue)}
+                            disabled={disabled}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
@@ -62,10 +64,16 @@ export default function HabilidadesCognitivas() {
           </table>
         </div>
         <section className="row g-3">
-          {COMMENT_PROMPTS.map((label) => (
-            <div className="col-12" key={label}>
+          {SUBDIMENSION_COMMENT_FIELDS.map(({ field, label, rows }) => (
+            <div className="col-12" key={field}>
               <label className="form-label">{label}</label>
-              <textarea className="form-control" rows={label.includes("Síntesis") ? 2 : 3} />
+              <textarea
+                className="form-control"
+                rows={rows}
+                value={comentarios?.[field] || ""}
+                onChange={(event) => onComentarioChange?.(field, event.target.value)}
+                disabled={disabled}
+              />
             </div>
           ))}
         </section>

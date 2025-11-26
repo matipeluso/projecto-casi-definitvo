@@ -1,11 +1,28 @@
-import React from "react";
+import React, { useState } from "react";
+import { postEvaluacion } from "../../../servicios/apiPie";
 
 /**
  * EvaluacionPIE (models.EvaluacionPIE - OneToOne)
  * Campos: fecha_evaluacion, resultados, conclusiones, proyecciones
  */
 export default function EvaluacionSection({ registroId, value, setValue, onSave }) {
+  const [saving, setSaving] = useState(false);
   const onChange = (e) => setValue({ ...value, [e.target.name]: e.target.value });
+  const handleSave = async () => {
+    if (saving) return;
+    const payload = { ...value, registro: registroId };
+    setSaving(true);
+    try {
+      await postEvaluacion(payload);
+      if (onSave) {
+        await onSave(payload);
+      }
+    } catch (error) {
+      console.error("No se pudo guardar la Evaluación PIE.", error);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <section>
@@ -14,9 +31,10 @@ export default function EvaluacionSection({ registroId, value, setValue, onSave 
         <button
           type="button"
           className="btn btn-primary btn-sm"
-          onClick={() => onSave({ ...value, registro: registroId })}
+          disabled={saving}
+          onClick={handleSave}
         >
-          Guardar sección
+          {saving ? "Guardando..." : "Guardar sección"}
         </button>
       </div>
 

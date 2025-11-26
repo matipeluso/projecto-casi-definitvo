@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth.models import AbstractUser
+from django.conf import settings
 from django.utils import timezone
 from datetime import timedelta
 import uuid
@@ -132,6 +133,17 @@ class Anamnesis(models.Model):
     fecha = models.DateField(blank=True, null=True)
     definicion_problema = models.TextField(blank=True, null=True)
     observaciones_generales = models.TextField(blank=True, null=True)
+    datos_formulario = models.JSONField(default=dict, blank=True)
+    payload_version = models.CharField(max_length=20, blank=True, null=True)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name='anamnesis_registradas'
+    )
+    creado_en = models.DateTimeField(auto_now_add=True)
+    actualizado_en = models.DateTimeField(auto_now=True)
     pdf_generado = models.FileField(upload_to='anamnesis_pdfs/', blank=True, null=True)
 
 
@@ -301,6 +313,7 @@ class InformeFamilia(models.Model):
     trabajo_colaborativo = models.TextField(blank=True, null=True)
     apoyos_requeridos_hogar = models.TextField(blank=True, null=True)
     acuerdos_compromisos = models.TextField(blank=True, null=True)
+    pdf_generado = models.FileField(upload_to='informes_familia/', blank=True, null=True)
 
 
 class InformeFamiliaInstrumento(models.Model):
@@ -326,6 +339,7 @@ class InformeFamiliaEntrega(models.Model):
     informe = models.ForeignKey(InformeFamilia, on_delete=models.CASCADE, related_name='entrega')
     profesional = models.ForeignKey(Usuario, on_delete=models.SET_NULL, null=True, blank=True, related_name='entregas')
     nombre_identidad = models.CharField(max_length=120, blank=True, null=True)
+    nombre_social = models.CharField(max_length=120, blank=True, null=True)
     rut = models.CharField(max_length=15, blank=True, null=True)
     rol_cargo = models.CharField(max_length=120, blank=True, null=True)
     telefono = models.CharField(max_length=50, blank=True, null=True)
@@ -391,6 +405,28 @@ class RegistroPIE(models.Model):
     fecha_creacion = models.DateField(auto_now_add=True)
     periodo = models.CharField(max_length=50, blank=True, null=True, help_text="Ej: Primer semestre, Segundo semestre, etc.")
     observaciones_generales = models.TextField(blank=True, null=True)
+    payload_version = models.CharField(max_length=40, blank=True, null=True)
+    datos_equipo = models.JSONField(blank=True, null=True)
+    datos_planificacion = models.JSONField(blank=True, null=True)
+    datos_implementacion = models.JSONField(blank=True, null=True)
+    datos_actividades = models.JSONField(blank=True, null=True)
+    datos_acta = models.JSONField(blank=True, null=True)
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='registros_pie_creados'
+    )
+    actualizado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='registros_pie_actualizados'
+    )
+    actualizado_en = models.DateTimeField(auto_now=True)
+    pdf_generado = models.FileField(upload_to='registros_pie/', blank=True, null=True)
 
     def __str__(self):
         return f"Registro PIE - {self.curso.nombre} ({self.periodo or 'Sin periodo'})"

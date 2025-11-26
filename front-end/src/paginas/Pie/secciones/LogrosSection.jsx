@@ -1,119 +1,180 @@
-import React from "react";
+import React, { useState } from "react";
+import { postLogros } from "../../../servicios/apiPie";
 
-/**
- * LogroAprendizaje (models.LogroAprendizaje)
- * Campos: estudiante(FK), fecha, logros, dificultades, estrategias_utilizadas, comentarios
- * Nota: En el front puedes ingresar RUN, pero para el backend envía estudiante: <id>
- */
-export default function LogrosSection({ registroId, items, setItems, onSave, onDelete, estudiantes = [] }) {
-  const obtenerNombreEstudiante = (logro) => {
-    const id = logro.estudiante_id || logro.estudiante;
-    const info = estudiantes.find((est) => String(est.id) === String(id));
-    if (info) return info.nombres_apellidos;
-    if (logro.estudiante?.nombres_apellidos) return logro.estudiante.nombres_apellidos;
-    return id || "—";
+const createEmptyParticipante = () => ({
+  nombre: "",
+  rol: "",
+  rut: "",
+  telefono: "",
+  firma: "",
+});
+
+const participanteColumns = [
+  { field: "nombre", label: "Nombre de los/as participantes" },
+  { field: "rol", label: "Rol que desempeña" },
+  { field: "rut", label: "RUT" },
+  { field: "telefono", label: "Teléfono" },
+  { field: "firma", label: "Firma" },
+];
+
+const ensureActaState = (value) => ({
+  fecha: value?.fecha || "",
+  participantes:
+    Array.isArray(value?.participantes) && value.participantes.length
+      ? value.participantes.map((p) => ({ ...createEmptyParticipante(), ...p }))
+      : Array.from({ length: 6 }, () => createEmptyParticipante()),
+  motivo: value?.motivo || "",
+  acuerdos: value?.acuerdos || "",
+  compromisos: value?.compromisos || "",
+});
+
+export default function LogrosSection({ value, setValue, onSave }) {
+  const [saving, setSaving] = useState(false);
+  const data = ensureActaState(value);
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await postLogros(data);
+      if (onSave) {
+        await onSave(data);
+      }
+    } catch (error) {
+      console.error("No se pudo guardar el Acta de reuniones.", error);
+    } finally {
+      setSaving(false);
+    }
   };
 
+  const updateState = (updater) => {
+    setValue((prev) => updater(ensureActaState(prev)));
+  };
+
+  const handleFieldChange = (field, newValue) => {
+    updateState((current) => ({ ...current, [field]: newValue }));
+  };
+
+  const handleParticipanteChange = (index, field, newValue) => {
+    updateState((current) => ({
+      ...current,
+      participantes: current.participantes.map((row, idx) =>
+        idx === index ? { ...row, [field]: newValue } : row
+      ),
+    }));
+  };
+
+  const handleAddParticipante = () => {
+    updateState((current) => ({
+      ...current,
+      participantes: [...current.participantes, createEmptyParticipante()],
+    }));
+  };
+
+  const handleRemoveParticipante = () => {
+    updateState((current) => {
+      if (current.participantes.length <= 1) return current;
+      return { ...current, participantes: current.participantes.slice(0, -1) };
+    });
+  };
+
+  const detailBlocks = [
+    { field: "motivo", label: "a) Motivo(s)" },
+    { field: "acuerdos", label: "b) Acuerdo(s)" },
+    { field: "compromisos", label: "c) Compromiso(s)" },
+  ];
+
   return (
-    <section>
-      <div className="d-flex justify-content-between align-items-center mb-2">
-        <h5 className="mb-0">Logros de Aprendizaje</h5>
-        <button type="button" className="btn btn-primary btn-sm" onClick={() => onSave(items)}>
-          Guardar sección
-        </button>
-      </div>
-
-      <div className="table-responsive">
-        <table className="table table-striped table-bordered align-middle">
-          <thead>
-            <tr>
-              <th>Estudiante</th>
-              <th>Fecha</th>
-              <th>Logros</th>
-              <th>Dificultades</th>
-              <th>Estrategias utilizadas</th>
-              <th>Comentarios</th>
-              <th style={{ width: 140 }}>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.length === 0 && (
-              <tr>
-                <td colSpan={7} className="text-center text-muted">No hay registros.</td>
-              </tr>
+    <section className="card border-0 shadow-sm">
+      <div className="card-body p-4">
+        <header className="mb-4">
+          <div className="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+              <p className="text-uppercase text-muted small mb-1">V. Acta de reuniones</p>
+              <h4 className="fw-bold mb-1">Registro de participación y acuerdos</h4>
+              <p className="text-secondary mb-0">
+                Documenta a los asistentes y los principales acuerdos surgidos en cada reunión.
+              </p>
+            </div>
+            {onSave && (
+              <button type="button" className="btn btn-primary" disabled={saving} onClick={handleSave}>
+                {saving ? "Guardando..." : "Guardar sección"}
+              </button>
             )}
-            {items.map((l) => (
-              <tr key={l.id}>
-                <td>{obtenerNombreEstudiante(l)}</td>
-                <td>{l.fecha}</td>
-                <td>{l.logros}</td>
-                <td>{l.dificultades}</td>
-                <td>{l.estrategias_utilizadas}</td>
-                <td>{l.comentarios}</td>
-                <td>
-                  <div className="btn-group btn-group-sm">
-                    <button className="btn btn-outline-secondary">Editar</button>
-                    <button className="btn btn-outline-danger" onClick={() => onDelete(l.id)}>Eliminar</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </header>
 
-      <form
-        className="row g-3 mt-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const f = e.currentTarget;
-          const nuevo = {
-            id: `temp-${Date.now()}`,
-            estudiante_id: f.estudiante_id.value,
-            fecha: f.fecha.value,
-            logros: f.logros.value.trim(),
-            dificultades: f.dificultades.value.trim(),
-            estrategias_utilizadas: f.estrategias_utilizadas.value.trim(),
-            comentarios: f.comentarios.value.trim(),
-            registro: registroId ?? null,
-          };
-          setItems((prev) => [...prev, nuevo]);
-          f.reset();
-        }}
-      >
-        <div className="col-md-3">
-          <label className="form-label">Estudiante</label>
-          <select name="estudiante_id" className="form-select" required>
-            <option value="">Seleccione…</option>
-            {estudiantes.map((est) => (
-              <option key={est.id} value={est.id}>{est.nombres_apellidos}</option>
-            ))}
-          </select>
+        <div className="d-flex align-items-center gap-3 mb-4 flex-wrap">
+          <span className="fw-semibold text-muted">Fecha:</span>
+          <input
+            type="date"
+            className="form-control form-control-sm"
+            style={{ maxWidth: 220 }}
+            value={data.fecha}
+            onChange={(e) => handleFieldChange("fecha", e.target.value)}
+          />
         </div>
-        <div className="col-md-2">
-          <label className="form-label">Fecha</label>
-          <input type="date" name="fecha" className="form-control" required />
+
+        <div className="border rounded-3 mb-4">
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3">
+            <h6 className="mb-0">Participantes de la reunión</h6>
+            <div className="d-flex gap-2">
+              <button type="button" className="btn btn-outline-primary btn-sm" onClick={handleAddParticipante}>
+                Agregar fila
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline-danger btn-sm"
+                onClick={handleRemoveParticipante}
+                disabled={data.participantes.length <= 1}
+              >
+                Quitar fila
+              </button>
+            </div>
+          </div>
+          <div className="table-responsive">
+            <table className="table table-bordered align-middle mb-0">
+              <thead className="table-light">
+                <tr>
+                  {participanteColumns.map((column) => (
+                    <th key={`head-${column.field}`}>{column.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.participantes.map((participante, index) => (
+                  <tr key={`participante-${index}`}>
+                    {participanteColumns.map((column) => (
+                      <td key={`${column.field}-${index}`}>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={participante[column.field] || ""}
+                          onChange={(e) => handleParticipanteChange(index, column.field, e.target.value)}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div className="col-md-2">
-          <label className="form-label">Logros</label>
-          <input name="logros" className="form-control" />
+
+        <div className="border rounded-3 p-4">
+          {detailBlocks.map((block, idx) => (
+            <div key={block.field} className={idx !== detailBlocks.length - 1 ? "mb-4" : "mb-0"}>
+              <label className="fw-semibold text-muted mb-2 d-block">{block.label}</label>
+              <textarea
+                className="form-control"
+                rows={4}
+                value={data[block.field]}
+                onChange={(e) => handleFieldChange(block.field, e.target.value)}
+              />
+            </div>
+          ))}
         </div>
-        <div className="col-md-2">
-          <label className="form-label">Dificultades</label>
-          <input name="dificultades" className="form-control" />
-        </div>
-        <div className="col-md-2">
-          <label className="form-label">Estrategias utilizadas</label>
-          <input name="estrategias_utilizadas" className="form-control" />
-        </div>
-        <div className="col-md-2">
-          <label className="form-label">Comentarios</label>
-          <input name="comentarios" className="form-control" />
-        </div>
-        <div className="col-12 d-flex justify-content-end">
-          <button type="submit" className="btn btn-success btn-sm">Agregar</button>
-        </div>
-      </form>
+      </div>
     </section>
   );
 }

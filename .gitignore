@@ -10,3 +10,8 @@ front-end/node_modules/
 
 # Local environment overrides
 *.env
+
+# Media/PDF artifacts
+back-end/evaluaciones_psico/
+back-end/anamnesis_pdfs/
+back-end/registros_pie/

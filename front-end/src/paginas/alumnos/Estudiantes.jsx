@@ -3,10 +3,17 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import Buscar from "../../componentes/interfaz/Buscar";
 import BotonCrearConModal from "../../componentes/interfaz/BotonCrearConModal";
-import { listarEstudiantes, crearEstudiante } from "../../servicios/estudiantes";
+import {
+  listarEstudiantes,
+  crearEstudiante,
+  actualizarEstudiante,
+  eliminarEstudiante,
+} from "../../servicios/estudiantes";
 import { listarCursos } from "../../servicios/cursos";
 import { listarEstablecimientos } from "../../servicios/establecimientos";
 import { listarApoderados } from "../../servicios/apoderados";
+import { obtenerEvaluacionPorEstudiante } from "../../servicios/evaluacionPsico";
+import { descargarPdfEvaluacion } from "../../servicios/evaluacionPsico";
 
 function norm(texto) {
   return (texto ?? "")
@@ -15,6 +22,42 @@ function norm(texto) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+
+function saveBlobAsFile(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+function mapAlumnoToInitialValues(alumno) {
+  if (!alumno) return {};
+  return {
+    nombres_apellidos: alumno.nombres_apellidos || "",
+    nombre_social: alumno.nombre_social || "",
+    run: alumno.run || "",
+    genero: alumno.genero || "",
+    fecha_nacimiento: alumno.fecha_nacimiento || "",
+    nacionalidad: alumno.nacionalidad || "",
+    lengua_origen: alumno.lengua_origen || "",
+    lengua_uso: alumno.lengua_uso || "",
+    direccion: alumno.direccion || "",
+    telefono: alumno.telefono || "",
+    curso_id: alumno?.curso?.id ? String(alumno.curso.id) : "",
+    establecimiento_id:
+      alumno?.establecimiento?.id
+        ? String(alumno.establecimiento.id)
+        : alumno?.curso?.establecimiento?.id
+          ? String(alumno.curso.establecimiento.id)
+          : "",
+    apoderado_id: alumno?.apoderado?.id ? String(alumno.apoderado.id) : "",
+  };
 }
 
 export default function Estudiantes() {
@@ -27,6 +70,10 @@ export default function Estudiantes() {
   const [cursos, setCursos] = useState([]);
   const [establecimientos, setEstablecimientos] = useState([]);
   const [apoderados, setApoderados] = useState([]);
+  const [evaluacionesPsico, setEvaluacionesPsico] = useState({});
+  const [cargandoEvaluaciones, setCargandoEvaluaciones] = useState(false);
+  const [estudianteEliminando, setEstudianteEliminando] = useState(null);
+  const [estudianteDescargando, setEstudianteDescargando] = useState(null);
 
   async function cargarEstudiantes() {
     setCargando(true);
@@ -48,6 +95,40 @@ export default function Estudiantes() {
     cargarEstudiantes();
     cargarCombos();
   }, []);
+
+  useEffect(() => {
+    let activo = true;
+    async function cargarEvaluacionesPsico() {
+      if (!estudiantes.length) {
+        setEvaluacionesPsico({});
+        setCargandoEvaluaciones(false);
+        return;
+      }
+      setCargandoEvaluaciones(true);
+      try {
+        const resultados = await Promise.all(
+          estudiantes.map((alumno) =>
+            obtenerEvaluacionPorEstudiante(alumno.id).catch(() => null)
+          )
+        );
+        if (!activo) return;
+        const map = {};
+        resultados.forEach((evaluacion, index) => {
+          const alumno = estudiantes[index];
+          if (alumno && evaluacion) {
+            map[alumno.id] = evaluacion;
+          }
+        });
+        setEvaluacionesPsico(map);
+      } finally {
+        if (activo) setCargandoEvaluaciones(false);
+      }
+    }
+    cargarEvaluacionesPsico();
+    return () => {
+      activo = false;
+    };
+  }, [estudiantes]);
 
   async function cargarCombos() {
     setCargandoCombos(true);
@@ -111,6 +192,56 @@ export default function Estudiantes() {
     )
   ), [apoderados]);
 
+  const camposFormulario = useMemo(() => [
+    { name: "nombres_apellidos", label: "Nombre completo", required: true, col: "col-md-6" },
+    { name: "nombre_social", label: "Nombre social", col: "col-md-6" },
+    { name: "run", label: "RUN", col: "col-md-3" },
+    {
+      name: "genero",
+      label: "Género",
+      type: "select",
+      col: "col-md-3",
+      options: [
+        { value: "", label: "Seleccione género" },
+        { value: "M", label: "Masculino" },
+        { value: "F", label: "Femenino" },
+        { value: "O", label: "Otro" },
+      ],
+    },
+    { name: "fecha_nacimiento", label: "Fecha nacimiento", type: "date", col: "col-md-3" },
+    { name: "nacionalidad", label: "Nacionalidad", col: "col-md-3" },
+    { name: "lengua_origen", label: "Lengua de origen", col: "col-md-4" },
+    { name: "lengua_uso", label: "Lengua de uso", col: "col-md-4" },
+    {
+      name: "curso_id",
+      label: "Curso",
+      type: "select",
+      col: "col-md-6",
+      options: opcionesCursos,
+      disabled: cargandoCombos || cursos.length === 0,
+      required: cursos.length > 0,
+    },
+    {
+      name: "establecimiento_id",
+      label: "Establecimiento",
+      type: "select",
+      col: "col-md-6",
+      options: opcionesEstablecimientos,
+      disabled: cargandoCombos || establecimientos.length === 0,
+    },
+    {
+      name: "apoderado_id",
+      label: "Apoderado",
+      type: "select",
+      col: "col-md-6",
+      options: opcionesApoderados,
+      disabled: cargandoCombos || apoderados.length === 0,
+      required: apoderados.length > 0,
+    },
+    { name: "direccion", label: "Dirección", col: "col-md-8" },
+    { name: "telefono", label: "Teléfono", col: "col-md-4" },
+  ], [opcionesCursos, opcionesEstablecimientos, opcionesApoderados, cargandoCombos, cursos.length, establecimientos.length, apoderados.length]);
+
   function transformarEstudianteForm(vals) {
     const clean = (value) => {
       const trimmed = (value ?? "").trim();
@@ -163,6 +294,54 @@ export default function Estudiantes() {
     }
   }
 
+  async function handleActualizarEstudiante(id, payload) {
+    try {
+      await actualizarEstudiante(id, payload);
+      toast.success("Estudiante actualizado correctamente.");
+      await cargarEstudiantes();
+    } catch (err) {
+      const detalle = err?.response?.data;
+      const msg = detalle?.detail || detalle?.message || "No se pudo actualizar el estudiante.";
+      toast.error(msg);
+      throw err;
+    }
+  }
+
+  async function handleEliminarEstudiante(alumno) {
+    if (!alumno?.id) return;
+    const confirmado = window.confirm(`¿Eliminar a ${alumno.nombres_apellidos || "este estudiante"}?`);
+    if (!confirmado) return;
+    setEstudianteEliminando(alumno.id);
+    try {
+      await eliminarEstudiante(alumno.id);
+      toast.success("Estudiante eliminado correctamente.");
+      await cargarEstudiantes();
+    } catch (err) {
+      const detalle = err?.response?.data;
+      const msg = detalle?.detail || detalle?.message || "No se pudo eliminar al estudiante.";
+      toast.error(msg);
+    } finally {
+      setEstudianteEliminando(null);
+    }
+  }
+
+  async function handleDescargarPdf(alumnoId) {
+    const evaluacion = evaluacionesPsico[alumnoId];
+    const pdfPath = evaluacion?.pdf_generado;
+    if (!pdfPath) {
+      toast.info("El estudiante no tiene un PDF asociado.");
+      return;
+    }
+    setEstudianteDescargando(alumnoId);
+    try {
+      const blob = await descargarPdfEvaluacion(evaluacion.id);
+      const filename = pdfPath.split("/").pop() || `evaluacion_psico_${evaluacion.id}.pdf`;
+      saveBlobAsFile(blob, filename);
+    } finally {
+      setEstudianteDescargando(null);
+    }
+  }
+
   return (
     <div className="container py-4">
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
@@ -183,55 +362,7 @@ export default function Estudiantes() {
             icono="bi-person-plus-fill"
             titulo="Registrar estudiante"
             tamanoModal="modal-lg"
-            campos={[
-              { name: "nombres_apellidos", label: "Nombre completo", required: true, col: "col-md-6" },
-              { name: "nombre_social", label: "Nombre social", col: "col-md-6" },
-              { name: "run", label: "RUN", col: "col-md-3" },
-              {
-                name: "genero",
-                label: "Género",
-                type: "select",
-                col: "col-md-3",
-                options: [
-                  { value: "", label: "Seleccione género" },
-                  { value: "M", label: "Masculino" },
-                  { value: "F", label: "Femenino" },
-                  { value: "O", label: "Otro" },
-                ],
-              },
-              { name: "fecha_nacimiento", label: "Fecha nacimiento", type: "date", col: "col-md-3" },
-              { name: "nacionalidad", label: "Nacionalidad", col: "col-md-3" },
-              { name: "lengua_origen", label: "Lengua de origen", col: "col-md-4" },
-              { name: "lengua_uso", label: "Lengua de uso", col: "col-md-4" },
-              {
-                name: "curso_id",
-                label: "Curso",
-                type: "select",
-                col: "col-md-6",
-                options: opcionesCursos,
-                disabled: cargandoCombos || cursos.length === 0,
-                required: cursos.length > 0,
-              },
-              {
-                name: "establecimiento_id",
-                label: "Establecimiento",
-                type: "select",
-                col: "col-md-6",
-                options: opcionesEstablecimientos,
-                disabled: cargandoCombos || establecimientos.length === 0,
-              },
-              {
-                name: "apoderado_id",
-                label: "Apoderado",
-                type: "select",
-                col: "col-md-6",
-                options: opcionesApoderados,
-                disabled: cargandoCombos || apoderados.length === 0,
-                required: apoderados.length > 0,
-              },
-              { name: "direccion", label: "Dirección", col: "col-md-8" },
-              { name: "telefono", label: "Teléfono", col: "col-md-4" },
-            ]}
+            campos={camposFormulario}
             valoresIniciales={{ curso_id: "", establecimiento_id: "", apoderado_id: "" }}
             transformarValores={transformarEstudianteForm}
             onGuardar={handleCrearEstudiante}
@@ -273,18 +404,19 @@ export default function Estudiantes() {
               <th>Teléfono</th>
               <th>Apoderado</th>
               <th>Contacto apoderado</th>
+              <th>Acciones</th>
             </tr>
           </thead>
           <tbody>
             {cargando ? (
               <tr>
-                <td colSpan={6} className="text-center">
+                <td colSpan={15} className="text-center">
                   Cargando…
                 </td>
               </tr>
             ) : filtrados.length === 0 ? (
               <tr>
-                <td colSpan={6} className="text-center text-muted">
+                <td colSpan={15} className="text-center text-muted">
                   No hay estudiantes para mostrar.
                 </td>
               </tr>
@@ -306,6 +438,64 @@ export default function Estudiantes() {
                   <td>{alumno?.apoderado?.nombres_apellidos || "—"}</td>
                   <td>
                     {alumno?.apoderado?.telefono || alumno?.apoderado?.correo || "—"}
+                  </td>
+                  <td>
+                    <div className="d-flex flex-wrap gap-2">
+                      <BotonCrearConModal
+                        textoBoton="Editar"
+                        icono="bi-pencil-square"
+                        className="btn btn-sm btn-outline-primary"
+                        titulo={`Editar ${alumno.nombres_apellidos || "estudiante"}`}
+                        tamanoModal="modal-lg"
+                        campos={camposFormulario}
+                        valoresIniciales={mapAlumnoToInitialValues(alumno)}
+                        transformarValores={transformarEstudianteForm}
+                        onGuardar={(payload) => handleActualizarEstudiante(alumno.id, payload)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        onClick={() => handleEliminarEstudiante(alumno)}
+                        disabled={estudianteEliminando === alumno.id}
+                      >
+                        {estudianteEliminando === alumno.id ? (
+                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        ) : (
+                          <>
+                            <i className="bi bi-trash me-1" aria-hidden="true"></i>
+                            Eliminar
+                          </>
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => handleDescargarPdf(alumno.id)}
+                        disabled={
+                          cargandoEvaluaciones ||
+                          estudianteDescargando === alumno.id ||
+                          !evaluacionesPsico[alumno.id]?.pdf_generado
+                        }
+                      >
+                        {estudianteDescargando === alumno.id ? (
+                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        ) : (
+                          <>
+                            <i className="bi bi-file-earmark-pdf me-1" aria-hidden="true"></i>
+                            PDF
+                          </>
+                        )}
+                      </button>
+                    </div>
+                    <small className="text-muted d-block mt-1">
+                      {cargandoEvaluaciones
+                        ? "Buscando evaluación…"
+                        : evaluacionesPsico[alumno.id]?.pdf_generado
+                          ? "PDF disponible"
+                          : evaluacionesPsico[alumno.id]
+                            ? "Evaluación sin PDF"
+                            : "Sin evaluación"}
+                    </small>
                   </td>
                 </tr>
               ))

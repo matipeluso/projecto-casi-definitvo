@@ -1,28 +1,21 @@
 import React from "react";
+import {
+  SUBDIMENSION_COMMENT_FIELDS,
+  SUBDIMENSION_LOOKUP_BY_SLUG,
+} from "./subdimensionCatalog";
 
-const ITEMS = [
-  "Ordena objetos de menor a mayor y viceversa.",
-  "Agrupa y clasifica objetos.",
-  "Asocia los símbolos numéricos a una cantidad.",
-  "Comprende que la posición de un número determina su valor.",
-  "Lee y escribe números.",
-  "Realiza la operación que corresponde a partir de signos matemáticos.",
-  "Realiza cálculos escritos en operaciones matemáticas.",
-  "Realiza cálculos mentales en operaciones matemáticas.",
-  "Asocia objetos del entorno a formas geométricas.",
-  "Ubica posiciones y trayectorias en el espacio considerando una ubicación concreta.",
-  "Resuelve problemas matemáticos a nivel de su curso.",
-];
+const SECTION = SUBDIMENSION_LOOKUP_BY_SLUG["matematicas"];
+const DEFAULT_ITEMS = SECTION?.items ?? [];
+const OPTIONS = [1, 2, 3, 4, 0];
 
-const OPTIONS = ["1", "2", "3", "4", "0"];
-const COMMENT_PROMPTS = [
-  "Describa la mayor fortaleza del estudiante en esta área (y contexto en que se manifiesta)",
-  "Describa la mayor debilidad del estudiante en esta área (y contexto en que se manifiesta)",
-  "Síntesis: Señale el desempeño general del estudiante en esta área",
-  "Observaciones (señale aspectos o antecedentes no considerados o que usted crea importante relevar o complementar)",
-];
-
-export default function Matematicas() {
+export default function Matematicas({
+  values = [],
+  comentarios = {},
+  disabled = false,
+  onValorChange,
+  onComentarioChange,
+}) {
+  const items = values.length ? values : DEFAULT_ITEMS;
   return (
     <div className="container mb-4">
       <div className="border rounded p-4 bg-white">
@@ -41,17 +34,29 @@ export default function Matematicas() {
               </tr>
             </thead>
             <tbody>
-              {ITEMS.map((texto, index) => {
-                const name = `matematicas_${index + 1}`;
+              {items.map((item, index) => {
+                const name = `matematicas_${item.numero || index + 1}`;
                 return (
                   <tr key={name}>
-                    <td className="text-center fw-bold">{index + 1}</td>
-                    <td>{texto}</td>
-                    {OPTIONS.map((valor) => (
-                      <td key={`${name}-${valor}`} className="text-center">
-                        <input type="radio" name={name} value={valor} className="form-check-input" />
-                      </td>
-                    ))}
+                    <td className="text-center fw-bold">{item.numero || index + 1}</td>
+                    <td>{item.descripcion || item}</td>
+                    {OPTIONS.map((valor) => {
+                      const numericValue = Number(valor);
+                      const checked = Number(item.valor) === numericValue;
+                      return (
+                        <td key={`${name}-${valor}`} className="text-center">
+                          <input
+                            type="radio"
+                            name={name}
+                            value={numericValue}
+                            className="form-check-input"
+                            checked={checked}
+                            onChange={() => onValorChange?.(index, numericValue)}
+                            disabled={disabled}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
@@ -59,10 +64,16 @@ export default function Matematicas() {
           </table>
         </div>
         <section className="row g-3">
-          {COMMENT_PROMPTS.map((label) => (
-            <div className="col-12" key={label}>
+          {SUBDIMENSION_COMMENT_FIELDS.map(({ field, label, rows }) => (
+            <div className="col-12" key={field}>
               <label className="form-label">{label}</label>
-              <textarea className="form-control" rows={label.includes("Síntesis") ? 2 : 3} />
+              <textarea
+                className="form-control"
+                rows={rows}
+                value={comentarios?.[field] || ""}
+                onChange={(event) => onComentarioChange?.(field, event.target.value)}
+                disabled={disabled}
+              />
             </div>
           ))}
         </section>

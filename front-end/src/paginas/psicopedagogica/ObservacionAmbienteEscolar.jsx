@@ -97,42 +97,6 @@ export default function ObservacionAmbienteEscolar({ valores = {}, onValorChange
             disabled={disabled}
           />
 
-          <fieldset className="row g-3 mt-4" disabled>
-            <div className="col-md-6">
-              <label className="form-label">Nombre evaluador(a)</label>
-              <input type="text" className="form-control" placeholder="Próximamente" />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">RUT</label>
-              <input type="text" className="form-control" placeholder="Próximamente" />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">Rol / Cargo</label>
-              <input type="text" className="form-control" placeholder="Docente, co-docente, psicólogo, etc." />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">Especialidad</label>
-              <input type="text" className="form-control" placeholder="Próximamente" />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">Fecha observación</label>
-              <input type="date" className="form-control" />
-            </div>
-            <div className="col-md-6">
-              <label className="form-label">Lugar (aula, patio, otro)</label>
-              <input type="text" className="form-control" placeholder="Próximamente" />
-            </div>
-            <div className="col-12">
-              <label className="form-label">Firma</label>
-              <input type="text" className="form-control" placeholder="Próximamente" />
-            </div>
-            <div className="col-12">
-              <p className="text-muted small mb-0">
-                Esta sección se conectará con el formulario de observación cualitativa en la siguiente iteración.
-              </p>
-            </div>
-          </fieldset>
-
           <footer className="text-muted small text-center mt-4">
             Los datos de este documento son confidenciales; su divulgación o uso indebido será penado por la ley.
           </footer>

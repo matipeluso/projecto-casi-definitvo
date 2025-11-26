@@ -1,12 +1,13 @@
 from django.contrib.auth import authenticate, get_user_model, login as django_login, logout as django_logout
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
+from django.http import FileResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from rest_framework import filters, permissions, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
@@ -94,8 +95,17 @@ from .serializers import (
     UsuarioPerfilSerializer,
     UsuarioSerializer,
 )
-from .utils.pdf_generator import generar_pdf_anamnesis, generar_pdf_registro_pie
+import logging
+import os
 
+from .utils.pdf_generator import (
+    generar_pdf_anamnesis,
+    generar_pdf_registro_pie,
+    generar_pdf_evaluacion_psicopedagogica,
+    generar_pdf_informe_familia,
+)
+
+logger = logging.getLogger(__name__)
 Usuario = get_user_model()
 
 
@@ -216,9 +226,7 @@ class EspecialidadViewSet(RoleScopedViewSet):
         user = self.request.user
         if not user.is_authenticated:
             return queryset.none()
-        if user.is_superuser or user.is_staff:
-            return queryset
-        # Profesionales pueden leer las especialidades para formularios
+        # Registro transversal; basta con estar autenticado
         return queryset
 
 
@@ -277,9 +285,16 @@ class EstudianteViewSet(RoleScopedViewSet):
 
 
 class AnamnesisViewSet(RoleScopedViewSet):
-    queryset = Anamnesis.objects.select_related("estudiante").all()
+    queryset = Anamnesis.objects.select_related("estudiante", "creado_por").all().order_by("-creado_en")
     serializer_class = AnamnesisSerializer
     establishment_lookup = "estudiante__establecimiento_id"
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        estudiante_id = self.request.query_params.get("estudiante")
+        if estudiante_id:
+            queryset = queryset.filter(estudiante_id=estudiante_id)
+        return queryset
 
     def perform_create(self, serializer):
         instance = serializer.save()
@@ -290,6 +305,40 @@ class AnamnesisViewSet(RoleScopedViewSet):
         instance = serializer.save()
         instance.pdf_generado = generar_pdf_anamnesis(instance)
         instance.save()
+
+    @action(detail=True, methods=["get"], url_path="descargar-pdf")
+    def descargar_pdf(self, request, pk=None):
+        anamnesis = self.get_object()
+        if not anamnesis.pdf_generado:
+            pdf_path = generar_pdf_anamnesis(anamnesis)
+            if pdf_path:
+                anamnesis.pdf_generado = pdf_path
+                anamnesis.save(update_fields=["pdf_generado"])
+            else:
+                return Response(
+                    {"detail": "La anamnesis aún no cuenta con un PDF generado."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        archivo = anamnesis.pdf_generado
+        try:
+            file_handle = archivo.open("rb")
+        except FileNotFoundError:
+            pdf_path = generar_pdf_anamnesis(anamnesis)
+            if not pdf_path:
+                return Response(
+                    {"detail": "El archivo PDF ya no está disponible."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            anamnesis.pdf_generado = pdf_path
+            anamnesis.save(update_fields=["pdf_generado"])
+            archivo = anamnesis.pdf_generado
+            file_handle = archivo.open("rb")
+
+        filename = os.path.basename(archivo.name) or f"anamnesis_{anamnesis.pk}.pdf"
+        response = FileResponse(file_handle, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 class AntecedenteSaludViewSet(RoleScopedViewSet):
@@ -320,6 +369,47 @@ class EvaluacionPsicopedagogicaViewSet(RoleScopedViewSet):
         if estudiante_id:
             queryset = queryset.filter(estudiante_id=estudiante_id)
         return queryset
+
+    def _generar_pdf(self, evaluacion):
+        try:
+            pdf_path = generar_pdf_evaluacion_psicopedagogica(evaluacion)
+        except Exception as exc:  # pragma: no cover - logging path
+            logger.exception("No se pudo generar el PDF de la evaluación %s", evaluacion.id)
+            return
+        if pdf_path:
+            evaluacion.pdf_generado = pdf_path
+            evaluacion.save(update_fields=["pdf_generado"])
+
+    def perform_create(self, serializer):
+        evaluacion = serializer.save()
+        self._generar_pdf(evaluacion)
+
+    def perform_update(self, serializer):
+        evaluacion = serializer.save()
+        self._generar_pdf(evaluacion)
+
+    @action(detail=True, methods=["get"], url_path="descargar-pdf")
+    def descargar_pdf(self, request, pk=None):
+        evaluacion = self.get_object()
+        if not evaluacion.pdf_generado:
+            return Response(
+                {"detail": "La evaluación aún no cuenta con un PDF generado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        archivo = evaluacion.pdf_generado
+        try:
+            file_handle = archivo.open("rb")
+        except FileNotFoundError:
+            return Response(
+                {"detail": "El archivo PDF ya no está disponible."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        filename = os.path.basename(archivo.name) or f"evaluacion_psico_{evaluacion.pk}.pdf"
+        response = FileResponse(file_handle, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 class TrayectoriaEscolarViewSet(RoleScopedViewSet):
@@ -496,6 +586,92 @@ class InformeFamiliaViewSet(RoleScopedViewSet):
     serializer_class = InformeFamiliaSerializer
     establishment_lookup = "Estudiante__establecimiento_id"
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            logger.warning(
+                "[InformeFamilia] payload invalido (usuario=%s): data=%s errores=%s",
+                request.user.pk if request.user.is_authenticated else "anonimo",
+                request.data,
+                serializer.errors,
+            )
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = self.get_serializer(instance, data=request.data, partial=partial)
+        if not serializer.is_valid():
+            logger.warning(
+                "[InformeFamilia] payload invalido en update (usuario=%s, informe=%s): data=%s errores=%s",
+                request.user.pk if request.user.is_authenticated else "anonimo",
+                instance.pk,
+                request.data,
+                serializer.errors,
+            )
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        self.perform_update(serializer)
+        if getattr(instance, "_prefetched_objects_cache", None):
+            instance._prefetched_objects_cache = {}
+        return Response(serializer.data)
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        estudiante_id = self.request.query_params.get("estudiante")
+        if estudiante_id:
+            queryset = queryset.filter(Estudiante_id=estudiante_id)
+        return queryset
+
+    def _generar_pdf(self, informe):
+        try:
+            pdf_path = generar_pdf_informe_familia(informe)
+        except Exception:  # pragma: no cover - solo log
+            logger.exception("No se pudo generar el PDF del informe %s", informe.id)
+            return
+        if pdf_path:
+            informe.pdf_generado = pdf_path
+            informe.save(update_fields=["pdf_generado"])
+
+    def perform_create(self, serializer):
+        informe = serializer.save()
+        self._generar_pdf(informe)
+
+    def perform_update(self, serializer):
+        informe = serializer.save()
+        self._generar_pdf(informe)
+
+    @action(detail=True, methods=["get"], url_path="descargar-pdf")
+    def descargar_pdf(self, request, pk=None):
+        informe = self.get_object()
+        if not informe.pdf_generado:
+            self._generar_pdf(informe)
+            if not informe.pdf_generado:
+                return Response(
+                    {"detail": "El informe aún no cuenta con un PDF disponible."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        archivo = informe.pdf_generado
+        try:
+            file_handle = archivo.open("rb")
+        except FileNotFoundError:
+            self._generar_pdf(informe)
+            archivo = informe.pdf_generado
+            if not archivo:
+                return Response(
+                    {"detail": "El archivo PDF ya no está disponible."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            file_handle = archivo.open("rb")
+
+        filename = os.path.basename(archivo.name) or f"informe_familia_{informe.pk}.pdf"
+        response = FileResponse(file_handle, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
 
 class InformeFamiliaInstrumentoViewSet(RoleScopedViewSet):
     queryset = InformeFamiliaInstrumento.objects.select_related(
@@ -569,6 +745,53 @@ class RegistroPIEViewSet(RoleScopedViewSet):
     def filter_for_externo(self, queryset):
         return queryset.filter(responsable=self.request.user)
 
+    def _generar_pdf(self, registro):
+        try:
+            pdf_path = generar_pdf_registro_pie(registro)
+        except Exception:  # pragma: no cover - solo log
+            logger.exception("No se pudo generar el PDF del registro PIE %s", registro.id)
+            return
+        if pdf_path:
+            registro.pdf_generado = pdf_path
+            registro.save(update_fields=["pdf_generado"])
+
+    def perform_create(self, serializer):
+        registro = serializer.save()
+        self._generar_pdf(registro)
+
+    def perform_update(self, serializer):
+        registro = serializer.save()
+        self._generar_pdf(registro)
+
+    @action(detail=True, methods=["get"], url_path="descargar-pdf")
+    def descargar_pdf(self, request, pk=None):
+        registro = self.get_object()
+        if not registro.pdf_generado:
+            self._generar_pdf(registro)
+            if not registro.pdf_generado:
+                return Response(
+                    {"detail": "El registro aún no cuenta con un PDF disponible."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        archivo = registro.pdf_generado
+        try:
+            file_handle = archivo.open("rb")
+        except FileNotFoundError:
+            self._generar_pdf(registro)
+            try:
+                file_handle = registro.pdf_generado.open("rb")
+            except Exception:
+                return Response(
+                    {"detail": "El archivo PDF ya no está disponible."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+
+        filename = os.path.basename(archivo.name) or f"registro_pie_{registro.pk}.pdf"
+        response = FileResponse(file_handle, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
 
 class RegistroPDERelatedViewSet(RoleScopedViewSet):
     establishment_lookup = "registro__curso__establecimiento_id"
@@ -613,6 +836,9 @@ def generar_registro_pie_pdf(request, registro_id):
     try:
         registro = RegistroPIE.objects.get(pk=registro_id)
         pdf_path = generar_pdf_registro_pie(registro)
+        if pdf_path:
+            registro.pdf_generado = pdf_path
+            registro.save(update_fields=["pdf_generado"])
         return Response({"pdf": pdf_path})
     except RegistroPIE.DoesNotExist:
         return Response({"error": "Registro PIE no encontrado"}, status=status.HTTP_404_NOT_FOUND)

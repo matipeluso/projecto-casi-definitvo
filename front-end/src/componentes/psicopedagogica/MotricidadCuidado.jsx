@@ -1,24 +1,21 @@
 import React from "react";
+import {
+  SUBDIMENSION_COMMENT_FIELDS,
+  SUBDIMENSION_LOOKUP_BY_SLUG,
+} from "./subdimensionCatalog";
 
-const ITEMS = [
-  "Se desplaza con coordinación y equilibrio.",
-  "Combina diferentes movimientos y posturas al desplazarse.",
-  "Corre con fluidez, variando la velocidad, la dirección y el tipo de desplazamiento.",
-  "En actividades motrices, mantiene la coordinación y control dinámico de su cuerpo.",
-  "Ejecuta movimientos de manipulación que requieren control muscular fino.",
-  "Efectúa trabajos grafo-motores con precisión y seguridad en los trazos.",
-  "Manipula objetos y herramientas con precisión.",
-  "Realiza ejercicios que requieren esfuerzo físico sostenido.",
-  "Realiza en forma autónoma prácticas de autocuidado e higiene corporal.",
-  "Cuida y guarda sus pertenencias.",
-  "Manifiesta iniciativa en el cuidado y bienestar personal.",
-  "Identifica situaciones u objetos que son riesgosos para su seguridad.",
-  "Presenta automatismos o movimientos reiterativos como balanceo, movimientos de manos, etc.",
-];
+const SECTION = SUBDIMENSION_LOOKUP_BY_SLUG["motricidad-cuidado-personal"];
+const DEFAULT_ITEMS = SECTION?.items ?? [];
+const OPTIONS = [1, 2, 3, 4, 0];
 
-const OPTIONS = ["1", "2", "3", "4", "0"];
-
-export default function MotricidadCuidado() {
+export default function MotricidadCuidado({
+  values = [],
+  comentarios = {},
+  disabled = false,
+  onValorChange,
+  onComentarioChange,
+}) {
+  const items = values.length ? values : DEFAULT_ITEMS;
   return (
     <div className="container mb-4">
       <div className="border rounded p-4 bg-white">
@@ -37,17 +34,29 @@ export default function MotricidadCuidado() {
               </tr>
             </thead>
             <tbody>
-              {ITEMS.map((texto, index) => {
-                const name = `motricidad_${index + 1}`;
+              {items.map((item, index) => {
+                const name = `motricidad_${item.numero || index + 1}`;
                 return (
                   <tr key={name}>
-                    <td className="text-center fw-bold">{index + 1}</td>
-                    <td>{texto}</td>
-                    {OPTIONS.map((valor) => (
-                      <td key={`${name}-${valor}`} className="text-center">
-                        <input type="radio" name={name} value={valor} className="form-check-input" />
-                      </td>
-                    ))}
+                    <td className="text-center fw-bold">{item.numero || index + 1}</td>
+                    <td>{item.descripcion || item}</td>
+                    {OPTIONS.map((valor) => {
+                      const numericValue = Number(valor);
+                      const checked = Number(item.valor) === numericValue;
+                      return (
+                        <td key={`${name}-${valor}`} className="text-center">
+                          <input
+                            type="radio"
+                            name={name}
+                            value={numericValue}
+                            className="form-check-input"
+                            checked={checked}
+                            onChange={() => onValorChange?.(index, numericValue)}
+                            disabled={disabled}
+                          />
+                        </td>
+                      );
+                    })}
                   </tr>
                 );
               })}
@@ -55,15 +64,16 @@ export default function MotricidadCuidado() {
           </table>
         </div>
         <section className="row g-3">
-          {[
-            "Describa la mayor fortaleza del estudiante en esta área (y contexto en que se manifiesta)",
-            "Describa la mayor debilidad del estudiante en esta área (y contexto en que se manifiesta)",
-            "Síntesis: Señale el desempeño general del estudiante en esta área",
-            "Observaciones (señale aspectos o antecedentes no considerados o que usted crea importante relevar o complementar)",
-          ].map((label) => (
-            <div className="col-12" key={label}>
+          {SUBDIMENSION_COMMENT_FIELDS.map(({ field, label, rows }) => (
+            <div className="col-12" key={field}>
               <label className="form-label">{label}</label>
-              <textarea className="form-control" rows={label.includes("Síntesis") ? 2 : 3} />
+              <textarea
+                className="form-control"
+                rows={rows}
+                value={comentarios?.[field] || ""}
+                onChange={(event) => onComentarioChange?.(field, event.target.value)}
+                disabled={disabled}
+              />
             </div>
           ))}
         </section>

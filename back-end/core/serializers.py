@@ -139,6 +139,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    especialidad_nombre = serializers.CharField(write_only=True, required=False, allow_blank=True)
     establecimiento_id = serializers.PrimaryKeyRelatedField(
         queryset=Establecimiento.objects.all(),
         source="establecimiento",
@@ -159,10 +160,10 @@ class UsuarioSerializer(serializers.ModelSerializer):
             "email",
             "telefono",
             "rut",
-            "cargo",
             "tipo",
             "especialidad",
             "especialidad_id",
+            "especialidad_nombre",
             "establecimiento",
             "establecimiento_id",
             "is_active",
@@ -188,9 +189,21 @@ class UsuarioSerializer(serializers.ModelSerializer):
             attrs["rut"] = None
         if attrs.get("rut"):
             attrs["rut"] = normalizar_rut(attrs["rut"])
-        if attrs.get("cargo") == "":
-            attrs["cargo"] = None
         return attrs
+
+    def _assign_especialidad_from_nombre(self, validated_data):
+        nombre = (validated_data.pop("especialidad_nombre", "") or "").strip()
+        if nombre and not validated_data.get("especialidad"):
+            especialidad_obj, _ = Especialidad.objects.get_or_create(nombre=nombre)
+            validated_data["especialidad"] = especialidad_obj
+
+    def create(self, validated_data):
+        self._assign_especialidad_from_nombre(validated_data)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        self._assign_especialidad_from_nombre(validated_data)
+        return super().update(instance, validated_data)
 
     def validate_email(self, value):
         qs = UsuarioModel.objects.filter(email__iexact=value)
@@ -250,9 +263,8 @@ class UsuarioPerfilSerializer(serializers.ModelSerializer):
             "first_name",
             "last_name",
             "email",
-             "telefono",
+            "telefono",
             "rut",
-            "cargo",
             "tipo",
             "is_staff",
             "is_superuser",
@@ -380,10 +392,14 @@ class AntecedenteSaludSerializer(serializers.ModelSerializer):
         return super().update(instance, validated_data)
 
 
+ANAMNESIS_FORM_VERSION = "2025.11"
+
+
 class AnamnesisSerializer(serializers.ModelSerializer):
     informantes = InformanteSerializer(many=True, read_only=True)
     entrevistadores = EntrevistadorSerializer(many=True, read_only=True)
     antecedentes_salud = AntecedenteSaludSerializer(many=True, read_only=True)
+    creado_por = UsuarioPerfilSerializer(read_only=True)
 
     class Meta:
         model = Anamnesis
@@ -393,11 +409,45 @@ class AnamnesisSerializer(serializers.ModelSerializer):
             "fecha",
             "definicion_problema",
             "observaciones_generales",
+            "datos_formulario",
+            "payload_version",
+            "creado_por",
+            "creado_en",
+            "actualizado_en",
             "pdf_generado",
             "informantes",
             "entrevistadores",
             "antecedentes_salud",
         ]
+        read_only_fields = [
+            "pdf_generado",
+            "creado_por",
+            "creado_en",
+            "actualizado_en",
+        ]
+
+    def validate_datos_formulario(self, value):
+        if value in (None, ""):
+            return {}
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("Debe ser un objeto JSON.")
+        return value
+
+    def _apply_version(self, validated_data):
+        if "datos_formulario" in validated_data:
+            validated_data.setdefault("payload_version", ANAMNESIS_FORM_VERSION)
+        return validated_data
+
+    def create(self, validated_data):
+        request = self.context.get("request") if hasattr(self, "context") else None
+        if request and request.user.is_authenticated:
+            validated_data.setdefault("creado_por", request.user)
+        validated_data = self._apply_version(validated_data)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data = self._apply_version(validated_data)
+        return super().update(instance, validated_data)
 
 
 class SubdimensionAreaSerializer(serializers.ModelSerializer):
@@ -615,10 +665,36 @@ class RegistroPIESerializer(serializers.ModelSerializer):
     logros = LogroAprendizajeSerializer(many=True, read_only=True)
     planificacion = PlanificacionPIESerializer(read_only=True)
     evaluacion = EvaluacionPIESerializer(read_only=True)
+    pdf_generado = serializers.FileField(read_only=True)
 
     class Meta:
         model = RegistroPIE
         fields = "__all__"
+        read_only_fields = [
+            "fecha_creacion",
+            "creado_por",
+            "actualizado_por",
+            "actualizado_en",
+            "pdf_generado",
+        ]
+
+    def _apply_user_metadata(self, validated_data):
+        request = self.context.get("request") if hasattr(self, "context") else None
+        user = request.user if request and request.user.is_authenticated else None
+        if not user:
+            return validated_data
+        if not self.instance:
+            validated_data.setdefault("creado_por", user)
+        validated_data["actualizado_por"] = user
+        return validated_data
+
+    def create(self, validated_data):
+        validated_data = self._apply_user_metadata(validated_data)
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        validated_data = self._apply_user_metadata(validated_data)
+        return super().update(instance, validated_data)
 
 
 class EvaluacionSaludSerializer(serializers.ModelSerializer):
@@ -769,68 +845,61 @@ class FormularioEvaluacionSaludSerializer(serializers.ModelSerializer):
 
 
 class InformeFamiliaInstrumentoSerializer(serializers.ModelSerializer):
-    informe = serializers.PrimaryKeyRelatedField(read_only=True)
-    informe_id = serializers.PrimaryKeyRelatedField(
-        queryset=InformeFamilia.objects.all(),
-        source="informe",
-        write_only=True,
-    )
-
     class Meta:
         model = InformeFamiliaInstrumento
-        fields = "__all__"
+        fields = ["id", "nombre", "fecha_aplicacion"]
 
 
 class InformeFamiliaAmbitoSerializer(serializers.ModelSerializer):
-    informe = serializers.PrimaryKeyRelatedField(read_only=True)
-    informe_id = serializers.PrimaryKeyRelatedField(
-        queryset=InformeFamilia.objects.all(),
-        source="informe",
-        write_only=True,
-    )
-
     class Meta:
         model = InformeFamiliaAmbito
-        fields = "__all__"
+        fields = ["id", "ambito", "fortalezas", "necesidades_apoyo"]
 
 
 class InformeFamiliaSeguimientoSerializer(serializers.ModelSerializer):
-    informe = serializers.PrimaryKeyRelatedField(read_only=True)
-    informe_id = serializers.PrimaryKeyRelatedField(
-        queryset=InformeFamilia.objects.all(),
-        source="informe",
-        write_only=True,
-    )
-
     class Meta:
         model = InformeFamiliaSeguimiento
-        fields = "__all__"
+        fields = ["id", "fecha_seguimiento", "nota"]
 
 
 class InformeFamiliaEntregaSerializer(serializers.ModelSerializer):
-    informe = serializers.PrimaryKeyRelatedField(read_only=True)
-    informe_id = serializers.PrimaryKeyRelatedField(
-        queryset=InformeFamilia.objects.all(),
-        source="informe",
-        write_only=True,
-    )
-
     class Meta:
         model = InformeFamiliaEntrega
-        fields = "__all__"
+        fields = [
+            "id",
+            "profesional",
+            "nombre_identidad",
+            "nombre_social",
+            "rut",
+            "rol_cargo",
+            "telefono",
+            "email",
+        ]
+        extra_kwargs = {
+            "profesional": {"required": False, "allow_null": True},
+        }
 
 
 class InformeFamiliaReceptorSerializer(serializers.ModelSerializer):
-    informe = serializers.PrimaryKeyRelatedField(read_only=True)
-    informe_id = serializers.PrimaryKeyRelatedField(
-        queryset=InformeFamilia.objects.all(),
-        source="informe",
-        write_only=True,
-    )
-
     class Meta:
         model = InformeFamiliaReceptor
-        fields = "__all__"
+        fields = [
+            "id",
+            "apoderado",
+            "nombre_identidad",
+            "rut_pasaporte",
+            "nombre_social",
+            "telefono",
+            "email",
+            "relacion",
+            "es_apoderado_titular",
+            "es_apoderado_suplente",
+            "poder_simple",
+            "en_presencia_de",
+        ]
+        extra_kwargs = {
+            "apoderado": {"required": False, "allow_null": True},
+        }
 
 
 class InformeFamiliaSerializer(serializers.ModelSerializer):
@@ -840,15 +909,75 @@ class InformeFamiliaSerializer(serializers.ModelSerializer):
         source="Estudiante",
         write_only=True,
     )
-    instrumentos = InformeFamiliaInstrumentoSerializer(many=True, read_only=True)
-    ambitos = InformeFamiliaAmbitoSerializer(many=True, read_only=True)
-    seguimientos = InformeFamiliaSeguimientoSerializer(many=True, read_only=True)
-    entrega = InformeFamiliaEntregaSerializer(many=True, read_only=True)
-    receptores = InformeFamiliaReceptorSerializer(many=True, read_only=True)
+    instrumentos = InformeFamiliaInstrumentoSerializer(many=True, required=False)
+    ambitos = InformeFamiliaAmbitoSerializer(many=True, required=False)
+    seguimientos = InformeFamiliaSeguimientoSerializer(many=True, required=False)
+    entrega = InformeFamiliaEntregaSerializer(many=True, required=False)
+    receptores = InformeFamiliaReceptorSerializer(many=True, required=False)
 
     class Meta:
         model = InformeFamilia
         fields = "__all__"
+        extra_kwargs = {
+            "Estudiante": {"read_only": True},
+        }
+
+    NESTED_CONFIG = (
+        ("instrumentos", InformeFamiliaInstrumentoSerializer),
+        ("ambitos", InformeFamiliaAmbitoSerializer),
+        ("seguimientos", InformeFamiliaSeguimientoSerializer),
+        ("entrega", InformeFamiliaEntregaSerializer),
+        ("receptores", InformeFamiliaReceptorSerializer),
+    )
+
+    def _pop_nested(self, validated_data):
+        nested = {}
+        for field, _ in self.NESTED_CONFIG:
+            nested[field] = validated_data.pop(field, []) or []
+        return nested
+
+    @staticmethod
+    def _has_meaningful_data(payload):
+        for value in payload.values():
+            if isinstance(value, bool):
+                if value:
+                    return True
+                continue
+            if value not in (None, "", []):
+                return True
+        return False
+
+    def _replace_nested(self, instance, nested_data):
+        for field_name, serializer_class in self.NESTED_CONFIG:
+            items = nested_data.get(field_name)
+            if items is None:
+                continue
+            manager = getattr(instance, field_name)
+            manager.all().delete()
+            if not items:
+                continue
+            model_class = serializer_class.Meta.model
+            records = []
+            for item in items:
+                data = dict(item)
+                data.pop("id", None)
+                if not self._has_meaningful_data(data):
+                    continue
+                records.append(model_class(informe=instance, **data))
+            if records:
+                model_class.objects.bulk_create(records)
+
+    def create(self, validated_data):
+        nested = self._pop_nested(validated_data)
+        informe = super().create(validated_data)
+        self._replace_nested(informe, nested)
+        return informe
+
+    def update(self, instance, validated_data):
+        nested = self._pop_nested(validated_data)
+        informe = super().update(instance, validated_data)
+        self._replace_nested(informe, nested)
+        return informe
 
 
 class TrayectoriaEscolarSerializer(serializers.ModelSerializer):

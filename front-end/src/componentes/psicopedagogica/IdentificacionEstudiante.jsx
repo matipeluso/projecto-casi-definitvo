@@ -86,6 +86,8 @@ export default function IdentificacionEstudiante({
     uso: { grado: "", comprende: false, habla: false, lee: false, escribe: false },
   },
   onLenguaDominioChange,
+  fechaEvaluacion = "",
+  onFechaEvaluacionChange,
 }) {
   const edad = calcularEdad(estudianteActivo?.fecha_nacimiento);
   const estadoEvaluacion = isLoading ? "Cargando..." : evaluacionId ? "Edición" : "Nuevo registro";
@@ -162,6 +164,16 @@ export default function IdentificacionEstudiante({
                   </option>
                 ))}
               </select>
+            </div>
+            <div className="col-md-4">
+              <label className="form-label">Fecha de evaluación</label>
+              <input
+                type="date"
+                className="form-control"
+                value={fechaEvaluacion || ""}
+                onChange={(event) => onFechaEvaluacionChange?.(event.target.value)}
+                disabled={!puedeEditar || isSaving}
+              />
             </div>
           </div>
 
