@@ -7,99 +7,76 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-uw4m&_u@9_kehx!ptc=hnuzbm2tjlf1*s-7qfp*i!gsc3sfz5b'
 DEBUG = True
-
-ALLOWED_HOSTS = ["*"]
-
-CSRF_TRUSTED_ORIGINS = [
-    "http://54.234.221.254",
-    "http://54.234.221.254:8000",
-]
-
-# ======================================================
-# CORS (para que el frontend pueda consumir el backend)
-# ======================================================
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
-
-# ======================================================
-# APPS
-# ======================================================
+ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
-    "django.contrib.auth",
-    "django.contrib.contenttypes",
-    "django.contrib.sessions",
-    "django.contrib.messages",
-    "django.contrib.staticfiles",
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
 
-    # Terceros
-    "rest_framework",
-    "corsheaders",
-
-    # Apps
-    "core",
-    "mi_api",
+    'rest_framework',
+    'corsheaders',
+    'core',
 ]
 
-# ======================================================
-# MIDDLEWARE
-# ======================================================
-
-# IMPORTANTE: corsheaders SIEMPRE debe ir arriba
 MIDDLEWARE = [
-    "django.middleware.security.SecurityMiddleware",
-
-    "corsheaders.middleware.CorsMiddleware",  # DEBE IR AQUÍ
-
-    "django.contrib.sessions.middleware.SessionMiddleware",
-    "django.middleware.common.CommonMiddleware",
-    "django.middleware.csrf.CsrfViewMiddleware",
-    "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django.contrib.messages.middleware.MessageMiddleware",
-    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = "mi_api.urls"
+ROOT_URLCONF = 'mi_api.urls'
+WSGI_APPLICATION = 'mi_api.wsgi.application'
 
-# ======================================================
-# TEMPLATES (para servir el build de React)
-# ======================================================
-
+# =============================
+# TEMPLATES → USA build/
+# =============================
 TEMPLATES = [
     {
-        "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [
-            os.path.join(BASE_DIR, "build"),  # <-- Donde está el index.html del build
-        ],
-        "APP_DIRS": True,
-        "OPTIONS": {
-            "context_processors": [
-                "django.template.context_processors.request",
-                "django.contrib.auth.context_processors.auth",
-                "django.contrib.messages.context_processors.messages",
-                "django.template.context_processors.debug",
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [os.path.join(BASE_DIR, 'build')],   # 👈 AQUI VA EL BUILD
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+                'django.template.context_processors.debug',
             ],
         },
     },
 ]
 
-WSGI_APPLICATION = "mi_api.wsgi.application"
+# =============================
+# STATIC FILES
+# =============================
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# ======================================================
-# DATABASE
-# ======================================================
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'build', 'static'),   # 👈 JS, CSS del build
+]
 
+# =============================
+# BASE DE DATOS
+# =============================
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "nee",
-        "USER": "root",
-        "PASSWORD": "Codaw2002-.",  # <-- tu clave correcta
-        "HOST": "localhost",
-        "PORT": "3306",
+    'default': {
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': 'nee',
+        'USER': 'root',
+        'PASSWORD': '',
+        'HOST': 'localhost',
+        'PORT': '3306',
     }
 }
 
