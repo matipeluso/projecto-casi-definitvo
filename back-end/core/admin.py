@@ -40,7 +40,10 @@ class UsuarioAdmin(UserAdmin):
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('username', 'email', 'rut', 'cargo', 'password1', 'password2', 'tipo', 'especialidad', 'is_staff', 'is_active'),
+            'fields': (
+                'username', 'email', 'rut', 'cargo', 'password1', 'password2',
+                'tipo', 'especialidad', 'establecimiento', 'is_staff', 'is_active'
+            ),
         }),
     )
 

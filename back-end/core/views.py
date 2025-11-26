@@ -166,10 +166,18 @@ class IsStaffOrReadOnly(permissions.BasePermission):
         return request.user.is_staff or request.user.is_superuser
 
 
+class IsSuperuserOnly(permissions.BasePermission):
+    message = "Solo administradores pueden acceder a este recurso."
+
+    def has_permission(self, request, view):
+        user = request.user
+        return bool(user and user.is_authenticated and user.is_superuser)
+
+
 class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = Usuario.objects.select_related("especialidad", "establecimiento").all().order_by("username")
     serializer_class = UsuarioSerializer
-    permission_classes = [IsStaffOrReadOnly]
+    permission_classes = [IsSuperuserOnly]
     filter_backends = [filters.SearchFilter]
     search_fields = [
         "username",
@@ -236,6 +244,7 @@ class EstablecimientoViewSet(RoleScopedViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["nombre", "rbd", "comuna", "region"]
     establishment_lookup = "id"
+    permission_classes = [IsSuperuserOnly]
 
     def filter_for_externo(self, queryset):
         return queryset.none()

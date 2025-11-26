@@ -7,6 +7,12 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Usa una clave fija para desarrollo y permite sobreescribirla por entorno.
+SECRET_KEY = os.environ.get(
+    "DJANGO_SECRET_KEY",
+    "django-insecure-f2r1pc7jz0b7i1!x(n8)5@8pj3)#61f#c@p5c7s-5o9q93+1oa",
+)
+
 DEBUG = True
 ALLOWED_HOSTS = ['*']
 
@@ -74,7 +80,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'nee',
         'USER': 'root',
-        'PASSWORD': '',
+        'PASSWORD': 'admin12345',
         'HOST': 'localhost',
         'PORT': '3306',
     }

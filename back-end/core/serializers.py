@@ -197,14 +197,6 @@ class UsuarioSerializer(serializers.ModelSerializer):
             especialidad_obj, _ = Especialidad.objects.get_or_create(nombre=nombre)
             validated_data["especialidad"] = especialidad_obj
 
-    def create(self, validated_data):
-        self._assign_especialidad_from_nombre(validated_data)
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        self._assign_especialidad_from_nombre(validated_data)
-        return super().update(instance, validated_data)
-
     def validate_email(self, value):
         qs = UsuarioModel.objects.filter(email__iexact=value)
         if self.instance:
@@ -233,6 +225,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return value
 
     def create(self, validated_data):
+        self._assign_especialidad_from_nombre(validated_data)
         password = validated_data.pop("password", None)
         if not password:
             raise serializers.ValidationError({"password": "La contraseña es obligatoria al crear un usuario."})
@@ -242,6 +235,7 @@ class UsuarioSerializer(serializers.ModelSerializer):
         return usuario
 
     def update(self, instance, validated_data):
+        self._assign_especialidad_from_nombre(validated_data)
         password = validated_data.pop("password", None)
         for attr, value in validated_data.items():
             setattr(instance, attr, value)

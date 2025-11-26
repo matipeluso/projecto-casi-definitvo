@@ -6,6 +6,7 @@ export default function BarraNavegacion() {
   const { isAuth, user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const esAdmin = Boolean(user?.is_superuser);
 
   const handleLogout = async () => {
     try {
@@ -63,16 +64,18 @@ export default function BarraNavegacion() {
             {/* 👉 Link Usuarios, solo si hay sesión */}
             {isAuth && (
               <>
-                <li className="nav-item">
-                  <NavLink
-                    to="/usuarios"
-                    className={({ isActive }) =>
-                      "nav-link" + (isActive ? " active fw-semibold" : "")
-                    }
-                  >
-                    Usuarios
-                  </NavLink>
-                </li>
+                {esAdmin && (
+                  <li className="nav-item">
+                    <NavLink
+                      to="/usuarios"
+                      className={({ isActive }) =>
+                        "nav-link" + (isActive ? " active fw-semibold" : "")
+                      }
+                    >
+                      Usuarios
+                    </NavLink>
+                  </li>
+                )}
 
                 {/* 👉 Link Registro PIE (ya agregado) */}
                 <li className="nav-item">

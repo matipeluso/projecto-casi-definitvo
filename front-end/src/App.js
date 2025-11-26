@@ -35,14 +35,18 @@ import { AuthProvider, useAuth } from "./contexto/AuthContext";
 // -------------------------------------------------------------
 //  RUTA PROTEGIDA
 // -------------------------------------------------------------
-function ProtectedRoute({ children }) {
-  const { isAuth, status } = useAuth();
+function ProtectedRoute({ children, requireAdmin = false }) {
+  const { isAuth, status, user } = useAuth();
 
   // Espera a que el contexto termine de cargar
   if (status !== "ready") return null;
 
   // Si no está logueado → redirige a login
   if (!isAuth) return <Navigate to="/login" replace />;
+
+  if (requireAdmin && !user?.is_superuser) {
+    return <Navigate to="/sostenedor" replace />;
+  }
 
   return (
     <>
@@ -86,7 +90,7 @@ export default function App() {
             <Route
               path="/usuarios"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requireAdmin>
                   <Usuarios />
                 </ProtectedRoute>
               }
@@ -96,7 +100,7 @@ export default function App() {
             <Route
               path="/establecimientos"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute requireAdmin>
                   <Establecimientos />
                 </ProtectedRoute>
               }
