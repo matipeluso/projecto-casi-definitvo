@@ -72,7 +72,7 @@ TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
-            os.path.join(BASE_DIR, "static_build"),  # <-- Donde está el index.html del build
+            os.path.join(BASE_DIR, "build"),  # <-- Donde está el index.html del build
         ],
         "APP_DIRS": True,
         "OPTIONS": {
@@ -130,7 +130,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, "static_build", "static"),  # del build de React
+    os.path.join(BASE_DIR, "build", "static"),  # del build de React
 ]
 
 STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
