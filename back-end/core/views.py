@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model, login as django_login, logout as django_logout
 from django.contrib.auth.tokens import default_token_generator
 from django.core.mail import send_mail
@@ -103,6 +104,7 @@ from .utils.pdf_generator import (
     generar_pdf_registro_pie,
     generar_pdf_evaluacion_psicopedagogica,
     generar_pdf_informe_familia,
+    generar_pdf_antecedente_salud,
 )
 
 logger = logging.getLogger(__name__)
@@ -174,6 +176,21 @@ class IsSuperuserOnly(permissions.BasePermission):
         return bool(user and user.is_authenticated and user.is_superuser)
 
 
+class ProfessionalReadOnly(permissions.BasePermission):
+    """Impide que profesionales (no staff) editen o eliminen registros."""
+
+    message = "Los profesionales no pueden editar ni eliminar este recurso."
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return False
+        if request.method in ("PUT", "PATCH", "DELETE"):
+            if not (user.is_staff or user.is_superuser):
+                return False
+        return True
+
+
 class UsuarioViewSet(viewsets.ModelViewSet):
     queryset = Usuario.objects.select_related("especialidad", "establecimiento").all().order_by("username")
     serializer_class = UsuarioSerializer
@@ -190,11 +207,12 @@ class UsuarioViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         user = self.request.user
+        base_qs = self.queryset.all()
         if not user.is_authenticated:
-            return Usuario.objects.none()
+            return base_qs.none()
         if user.is_staff or user.is_superuser:
-            return self.queryset
-        return self.queryset.filter(pk=user.pk)
+            return base_qs
+        return base_qs.filter(pk=user.pk)
 
 
 class RoleScopedViewSet(viewsets.ModelViewSet):
@@ -268,6 +286,7 @@ class ApoderadoViewSet(RoleScopedViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["nombres_apellidos", "run", "telefono", "correo"]
     establishment_lookup = "estudiantes__establecimiento_id"
+    permission_classes = [ProfessionalReadOnly]
 
 
 class EstudianteViewSet(RoleScopedViewSet):
@@ -280,6 +299,7 @@ class EstudianteViewSet(RoleScopedViewSet):
     filter_backends = [filters.SearchFilter]
     search_fields = ["nombres_apellidos", "run", "curso__nombre", "establecimiento__nombre"]
     establishment_lookup = "establecimiento_id"
+    permission_classes = [ProfessionalReadOnly]
 
     def filter_queryset(self, queryset):
         queryset = super().filter_queryset(queryset)
@@ -354,6 +374,62 @@ class AntecedenteSaludViewSet(RoleScopedViewSet):
     queryset = AntecedenteSalud.objects.select_related("anamnesis", "anamnesis__estudiante").all()
     serializer_class = AntecedenteSaludSerializer
     establishment_lookup = "anamnesis__estudiante__establecimiento_id"
+
+    def filter_queryset(self, queryset):
+        queryset = super().filter_queryset(queryset)
+        estudiante_id = self.request.query_params.get("estudiante")
+        if estudiante_id:
+            queryset = queryset.filter(anamnesis__estudiante_id=estudiante_id)
+        return queryset
+
+    def _generar_pdf(self, antecedente):
+        try:
+            pdf_path = generar_pdf_antecedente_salud(antecedente)
+        except Exception:  # pragma: no cover
+            logger.exception("No se pudo generar el PDF de antecedentes de salud %s", antecedente.pk)
+            return
+        if pdf_path:
+            antecedente.pdf_generado = pdf_path
+            antecedente.save(update_fields=["pdf_generado"])
+
+    def perform_create(self, serializer):
+        antecedente = serializer.save()
+        self._generar_pdf(antecedente)
+        return antecedente
+
+    def perform_update(self, serializer):
+        antecedente = serializer.save()
+        self._generar_pdf(antecedente)
+        return antecedente
+
+    @action(detail=True, methods=["get"], url_path="descargar-pdf")
+    def descargar_pdf(self, request, pk=None):
+        antecedente = self.get_object()
+        if not antecedente.pdf_generado:
+            self._generar_pdf(antecedente)
+            if not antecedente.pdf_generado:
+                return Response(
+                    {"detail": "El registro aún no cuenta con un PDF generado."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        archivo = antecedente.pdf_generado
+        try:
+            handler = archivo.open("rb")
+        except FileNotFoundError:
+            self._generar_pdf(antecedente)
+            if not antecedente.pdf_generado:
+                return Response(
+                    {"detail": "El archivo PDF ya no está disponible."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            archivo = antecedente.pdf_generado
+            handler = archivo.open("rb")
+
+        filename = os.path.basename(archivo.name) or f"evaluacion_salud_{antecedente.pk}.pdf"
+        response = FileResponse(handler, content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
 
 class EvaluacionPsicopedagogicaViewSet(RoleScopedViewSet):
@@ -857,24 +933,44 @@ def generar_registro_pie_pdf(request, registro_id):
 
 @api_view(["POST"])
 def password_reset_request(request):
-    email = request.data.get("email")
+    email = (request.data.get("email") or "").strip()
+    generic_response = {"message": "Si el correo existe, te enviaremos un enlace para restablecer la contraseña."}
+    if not email:
+        return Response(generic_response, status=status.HTTP_200_OK)
+
     try:
-        user = Usuario.objects.get(email=email)
+        user = Usuario.objects.get(email__iexact=email)
     except Usuario.DoesNotExist:
-        return Response({"error": "No existe un usuario con ese correo."}, status=status.HTTP_404_NOT_FOUND)
+        # Respondemos 200 para no filtrar si el correo está registrado
+        return Response(generic_response, status=status.HTTP_200_OK)
 
     token = default_token_generator.make_token(user)
     uid = urlsafe_base64_encode(force_bytes(user.pk))
-    reset_link = f"http://tusitio.cl/password-reset/confirm/{uid}/{token}/"
+    frontend_base = getattr(settings, "FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+    reset_link = f"{frontend_base}/recuperar-contrasena?uid={uid}&token={token}"
 
-    send_mail(
-        "Restablecer contraseña",
-        f"Hola {user.first_name or user.username}, usa este enlace para restablecer tu contraseña: {reset_link}",
-        "no-reply@pie.cl",
-        [user.email],
-        fail_silently=False,
-    )
-    return Response({"message": "Correo de recuperación enviado correctamente."})
+    try:
+        send_mail(
+            "Restablecer contraseña",
+            (
+                f"Hola {user.first_name or user.username},\n\n"
+                "Recibimos una solicitud para restablecer tu contraseña en la plataforma PIE. "
+                f"Puedes crear una nueva usando el siguiente enlace (válido por tiempo limitado):\n{reset_link}\n\n"
+                "Si no solicitaste este cambio, ignora este correo."
+            ),
+            getattr(settings, "DEFAULT_FROM_EMAIL", "no-reply@pie.cl"),
+            [user.email],
+            fail_silently=False,
+        )
+    except Exception:  # pragma: no cover - dependiente de red
+        logger.exception("No se pudo enviar el correo de restablecimiento para %s", user.pk)
+        return Response(
+            {
+                "error": "No pudimos enviar el correo en este momento. Revisa la configuración SMTP o intenta más tarde.",
+            },
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    return Response(generic_response, status=status.HTTP_200_OK)
 
 
 @api_view(["POST"])
@@ -897,6 +993,12 @@ def password_reset_confirm(request):
     uidb64 = request.data.get("uid")
     token = request.data.get("token")
     new_password = request.data.get("new_password")
+
+    if not new_password or len(new_password) < 8:
+        return Response(
+            {"error": "La contraseña debe tener al menos 8 caracteres."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     try:
         uid = force_str(urlsafe_base64_decode(uidb64))

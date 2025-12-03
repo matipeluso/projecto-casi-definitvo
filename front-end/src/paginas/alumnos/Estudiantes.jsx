@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import Buscar from "../../componentes/interfaz/Buscar";
 import BotonCrearConModal from "../../componentes/interfaz/BotonCrearConModal";
+import { useAuth } from "../../contexto/AuthContext";
 import {
   listarEstudiantes,
   crearEstudiante,
@@ -12,8 +13,8 @@ import {
 import { listarCursos } from "../../servicios/cursos";
 import { listarEstablecimientos } from "../../servicios/establecimientos";
 import { listarApoderados } from "../../servicios/apoderados";
-import { obtenerEvaluacionPorEstudiante } from "../../servicios/evaluacionPsico";
-import { descargarPdfEvaluacion } from "../../servicios/evaluacionPsico";
+import { obtenerEvaluacionPorEstudiante, descargarPdfEvaluacion } from "../../servicios/evaluacionPsico";
+import { obtenerAntecedenteSaludPorEstudiante, descargarPdfAntecedenteSalud } from "../../servicios/salud";
 
 function norm(texto) {
   return (texto ?? "")
@@ -22,6 +23,17 @@ function norm(texto) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim();
+}
+
+function formatFecha(fecha) {
+  if (!fecha) return "—";
+  const date = new Date(fecha);
+  if (Number.isNaN(date.getTime())) return fecha;
+  return date.toLocaleDateString("es-CL", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 
@@ -62,6 +74,8 @@ function mapAlumnoToInitialValues(alumno) {
 
 export default function Estudiantes() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const soloLecturaProfesional = Boolean(user && !user.is_staff && !user.is_superuser);
   const [estudiantes, setEstudiantes] = useState([]);
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(false);
@@ -72,8 +86,11 @@ export default function Estudiantes() {
   const [apoderados, setApoderados] = useState([]);
   const [evaluacionesPsico, setEvaluacionesPsico] = useState({});
   const [cargandoEvaluaciones, setCargandoEvaluaciones] = useState(false);
+  const [antecedentesSalud, setAntecedentesSalud] = useState({});
+  const [cargandoSalud, setCargandoSalud] = useState(false);
   const [estudianteEliminando, setEstudianteEliminando] = useState(null);
   const [estudianteDescargando, setEstudianteDescargando] = useState(null);
+  const [estudianteDescargandoSalud, setEstudianteDescargandoSalud] = useState(null);
 
   async function cargarEstudiantes() {
     setCargando(true);
@@ -125,6 +142,39 @@ export default function Estudiantes() {
       }
     }
     cargarEvaluacionesPsico();
+    return () => {
+      activo = false;
+    };
+  }, [estudiantes]);
+
+  useEffect(() => {
+    let activo = true;
+    async function cargarAntecedentesSalud() {
+      if (!estudiantes.length) {
+        setAntecedentesSalud({});
+        setCargandoSalud(false);
+        return;
+      }
+      setCargandoSalud(true);
+      try {
+        const resultados = await Promise.all(
+          estudiantes.map((alumno) => obtenerAntecedenteSaludPorEstudiante(alumno.id).catch(() => null))
+        );
+        if (!activo) return;
+        const map = {};
+        resultados.forEach((antecedente, index) => {
+          const alumno = estudiantes[index];
+          if (alumno && antecedente) {
+            map[alumno.id] = antecedente;
+          }
+        });
+        setAntecedentesSalud(map);
+      } finally {
+        if (activo) setCargandoSalud(false);
+      }
+    }
+
+    cargarAntecedentesSalud();
     return () => {
       activo = false;
     };
@@ -195,7 +245,15 @@ export default function Estudiantes() {
   const camposFormulario = useMemo(() => [
     { name: "nombres_apellidos", label: "Nombre completo", required: true, col: "col-md-6" },
     { name: "nombre_social", label: "Nombre social", col: "col-md-6" },
-    { name: "run", label: "RUN", col: "col-md-3" },
+    {
+      name: "run",
+      label: "RUN",
+      col: "col-md-3",
+      attrs: {
+        pattern: "^[0-9kK.-]+$",
+        title: "Use solo números, puntos, guion y dígito verificador.",
+      },
+    },
     {
       name: "genero",
       label: "Género",
@@ -239,7 +297,17 @@ export default function Estudiantes() {
       required: apoderados.length > 0,
     },
     { name: "direccion", label: "Dirección", col: "col-md-8" },
-    { name: "telefono", label: "Teléfono", col: "col-md-4" },
+    {
+      name: "telefono",
+      label: "Teléfono",
+      col: "col-md-4",
+      type: "tel",
+      attrs: {
+        pattern: "^[0-9]{7,15}$",
+        inputMode: "numeric",
+        title: "Ingrese solo dígitos (7 a 15).",
+      },
+    },
   ], [opcionesCursos, opcionesEstablecimientos, opcionesApoderados, cargandoCombos, cursos.length, establecimientos.length, apoderados.length]);
 
   function transformarEstudianteForm(vals) {
@@ -342,6 +410,33 @@ export default function Estudiantes() {
     }
   }
 
+  async function handlePdfSalud(alumno) {
+    if (!alumno?.id) return;
+    const antecedente = antecedentesSalud[alumno.id];
+
+    if (!antecedente) {
+      navigate(`/evaluacion-salud?estudiante=${alumno.id}`);
+      return;
+    }
+
+    if (!antecedente.pdf_generado) {
+      toast.info("El antecedente de salud aún no tiene un PDF disponible.");
+      navigate(`/evaluacion-salud?estudiante=${alumno.id}`);
+      return;
+    }
+
+    setEstudianteDescargandoSalud(alumno.id);
+    try {
+      const blob = await descargarPdfAntecedenteSalud(antecedente.id);
+      const filename = antecedente.pdf_generado.split("/").pop() || `antecedente_salud_${antecedente.id}.pdf`;
+      saveBlobAsFile(blob, filename);
+    } catch (error) {
+      toast.error("No se pudo descargar el PDF de salud.");
+    } finally {
+      setEstudianteDescargandoSalud(null);
+    }
+  }
+
   return (
     <div className="container py-4">
       <div className="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-3">
@@ -386,8 +481,10 @@ export default function Estudiantes() {
         </div>
       )}
 
-      <div className="table-responsive">
-        <table className="table table-hover align-middle">
+      <div className="card shadow-sm border-0 mt-4 tabla-estudiantes__wrapper">
+        <div className="card-body p-0">
+          <div className="table-responsive">
+            <table className="table table-striped table-bordered table-sm align-middle tabla-estudiantes mb-0 text-center">
           <thead className="table-light">
             <tr>
               <th>RUN</th>
@@ -423,50 +520,62 @@ export default function Estudiantes() {
             ) : (
               filtrados.map((alumno) => (
                 <tr key={alumno.id || alumno.run}>
-                  <td>{alumno.run || "—"}</td>
-                  <td>{alumno.nombres_apellidos || "—"}</td>
+                  <td className="text-nowrap fw-semibold">{alumno.run || "—"}</td>
+                  <td className="texto-principal">{alumno.nombres_apellidos || "—"}</td>
                   <td>{alumno.nombre_social || "—"}</td>
-                  <td>{alumno?.curso?.nombre || "—"}</td>
+                  <td className="text-nowrap">
+                    <div>{alumno?.curso?.nombre || "—"}</div>
+                    {alumno?.curso?.nivel && <small className="text-muted d-block">{alumno.curso.nivel}</small>}
+                  </td>
                   <td>{alumno?.curso?.establecimiento?.nombre || alumno?.establecimiento?.nombre || "—"}</td>
                   <td>{alumno.genero || "—"}</td>
-                  <td>{alumno.fecha_nacimiento || "—"}</td>
+                  <td>
+                    <div>{formatFecha(alumno.fecha_nacimiento)}</div>
+                    {alumno.fecha_nacimiento && <small className="text-muted d-block">{alumno.fecha_nacimiento}</small>}
+                  </td>
                   <td>{alumno.nacionalidad || "—"}</td>
                   <td>{alumno.lengua_origen || "—"}</td>
                   <td>{alumno.lengua_uso || "—"}</td>
-                  <td>{alumno.direccion || "—"}</td>
-                  <td>{alumno.telefono || "—"}</td>
+                  <td className="tabla-estudiantes__breakable small text-start">{alumno.direccion || "—"}</td>
+                  <td className="text-nowrap">{alumno.telefono || "—"}</td>
                   <td>{alumno?.apoderado?.nombres_apellidos || "—"}</td>
-                  <td>
-                    {alumno?.apoderado?.telefono || alumno?.apoderado?.correo || "—"}
+                  <td className="tabla-estudiantes__breakable small text-start">
+                    {alumno?.apoderado?.telefono && <div>{alumno.apoderado.telefono}</div>}
+                    {alumno?.apoderado?.correo && <div>{alumno.apoderado.correo}</div>}
+                    {!alumno?.apoderado?.telefono && !alumno?.apoderado?.correo && "—"}
                   </td>
                   <td>
                     <div className="d-flex flex-wrap gap-2">
-                      <BotonCrearConModal
-                        textoBoton="Editar"
-                        icono="bi-pencil-square"
-                        className="btn btn-sm btn-outline-primary"
-                        titulo={`Editar ${alumno.nombres_apellidos || "estudiante"}`}
-                        tamanoModal="modal-lg"
-                        campos={camposFormulario}
-                        valoresIniciales={mapAlumnoToInitialValues(alumno)}
-                        transformarValores={transformarEstudianteForm}
-                        onGuardar={(payload) => handleActualizarEstudiante(alumno.id, payload)}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={() => handleEliminarEstudiante(alumno)}
-                        disabled={estudianteEliminando === alumno.id}
-                      >
-                        {estudianteEliminando === alumno.id ? (
-                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        ) : (
-                          <>
-                            <i className="bi bi-trash me-1" aria-hidden="true"></i>
-                            Eliminar
-                          </>
-                        )}
-                      </button>
+                      {!soloLecturaProfesional && (
+                        <>
+                          <BotonCrearConModal
+                            textoBoton="Editar"
+                            icono="bi-pencil-square"
+                            className="btn btn-sm btn-outline-primary"
+                            titulo={`Editar ${alumno.nombres_apellidos || "estudiante"}`}
+                            tamanoModal="modal-lg"
+                            campos={camposFormulario}
+                            valoresIniciales={mapAlumnoToInitialValues(alumno)}
+                            transformarValores={transformarEstudianteForm}
+                            onGuardar={(payload) => handleActualizarEstudiante(alumno.id, payload)}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() => handleEliminarEstudiante(alumno)}
+                            disabled={estudianteEliminando === alumno.id}
+                          >
+                            {estudianteEliminando === alumno.id ? (
+                              <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                            ) : (
+                              <>
+                                <i className="bi bi-trash me-1" aria-hidden="true"></i>
+                                Eliminar
+                              </>
+                            )}
+                          </button>
+                        </>
+                      )}
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-secondary"
@@ -486,22 +595,47 @@ export default function Estudiantes() {
                           </>
                         )}
                       </button>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-success"
+                        onClick={() => handlePdfSalud(alumno)}
+                        disabled={cargandoSalud || estudianteDescargandoSalud === alumno.id}
+                      >
+                        {estudianteDescargandoSalud === alumno.id ? (
+                          <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        ) : (
+                          <>
+                            <i className="bi bi-heart-pulse me-1" aria-hidden="true"></i>
+                            PDF Salud
+                          </>
+                        )}
+                      </button>
                     </div>
                     <small className="text-muted d-block mt-1">
                       {cargandoEvaluaciones
-                        ? "Buscando evaluación…"
+                        ? "Psico: buscando…"
                         : evaluacionesPsico[alumno.id]?.pdf_generado
-                          ? "PDF disponible"
+                          ? "Psico: PDF disponible"
                           : evaluacionesPsico[alumno.id]
-                            ? "Evaluación sin PDF"
-                            : "Sin evaluación"}
+                            ? "Psico: sin PDF"
+                            : "Psico: sin evaluación"}
+                      <br />
+                      {cargandoSalud
+                        ? "Salud: buscando…"
+                        : antecedentesSalud[alumno.id]?.pdf_generado
+                          ? "Salud: PDF disponible"
+                          : antecedentesSalud[alumno.id]
+                            ? "Salud: sin PDF"
+                            : "Salud: sin registro"}
                     </small>
                   </td>
                 </tr>
               ))
             )}
           </tbody>
-        </table>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );

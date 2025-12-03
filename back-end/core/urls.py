@@ -102,6 +102,9 @@ urlpatterns = [
     path('password-reset/request/', password_reset_request, name='password-reset-request'),
     path('password-reset/verify/', password_reset_verify, name='password-reset-verify'),
     path('password-reset/confirm/', password_reset_confirm, name='password-reset-confirm'),
+    # Alias usados por el front-end (mantener ambos mientras conviven builds)
+    path('auth/password-reset/', password_reset_request, name='auth-password-reset'),
+    path('auth/password-reset-confirm/', password_reset_confirm, name='auth-password-reset-confirm'),
     path('registros-pie/<int:registro_id>/pdf/', generar_registro_pie_pdf, name='registro-pie-pdf'),
 ]
 

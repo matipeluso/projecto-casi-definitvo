@@ -114,9 +114,28 @@ export default function Usuarios() {
       { name: "first_name", label: "Nombre", required: true, col: "col-md-4" },
       { name: "last_name", label: "Apellidos", required: true, col: "col-md-4" },
 
-      { name: "email", label: "Email", required: true, col: "col-md-4" },
-      { name: "telefono", label: "Teléfono", col: "col-md-2" },
-      { name: "rut", label: "RUT", col: "col-md-3", placeholder: "12.345.678-9" },
+      { name: "email", label: "Email", required: true, col: "col-md-4", type: "email" },
+      {
+        name: "telefono",
+        label: "Teléfono",
+        col: "col-md-2",
+        type: "tel",
+        attrs: {
+          pattern: "^[0-9]{7,15}$",
+          inputMode: "numeric",
+          title: "Ingrese solo dígitos (7 a 15).",
+        },
+      },
+      {
+        name: "rut",
+        label: "RUT",
+        col: "col-md-3",
+        placeholder: "12.345.678-9",
+        attrs: {
+          pattern: "^[0-9kK.-]+$",
+          title: "Use solo números, puntos, guion y dígito verificador.",
+        },
+      },
       {
         name: "tipo", label: "Tipo", type: "select", col: "col-md-2",
         options: [
@@ -203,18 +222,25 @@ export default function Usuarios() {
   // ---------- CRUD ----------
   async function crearUsuario(payload) {
     const cuerpo = transformarValoresUsuario(payload);
-    return crearUsuarioServicio(cuerpo)
-      .then((res) => {
-        toast.success("Usuario creado correctamente.");
-        cargarUsuarios();
-        cargarCombos();
-        return res;
-      })
-      .catch((err) => {
-        const msg = err.response?.data?.detail || err.response?.data?.message || "No se pudo crear el usuario.";
-        toast.error(msg);
-        throw err;
-      });
+    try {
+      const res = await crearUsuarioServicio(cuerpo);
+      const nuevoUsuario = res?.data?.id ? res.data : res?.data?.user;
+      if (nuevoUsuario?.id) {
+        setUsuarios((prev) => {
+          const base = Array.isArray(prev) ? prev : [];
+          const sinDuplicado = base.filter((u) => u.id !== nuevoUsuario.id);
+          return [nuevoUsuario, ...sinDuplicado];
+        });
+      }
+      toast.success("Usuario creado correctamente.");
+      await cargarUsuarios();
+      await cargarCombos();
+      return res;
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.response?.data?.message || "No se pudo crear el usuario.";
+      toast.error(msg);
+      throw err;
+    }
   }
 
   async function actualizarUsuario(id, payload) {

@@ -66,8 +66,8 @@ export const accesosGenerales = [
     color: "danger",
   },
   {
-    title: "Reportes",
-    description: "Próximamente: reportes ejecutivos y descargas masivas.",
+    title: "Informe para la familia",
+    description: "Genera y comparte el informe consolidado para cada familia.",
     to: "/informes-familia",
     icon: "bi-graph-up",
     color: "dark",

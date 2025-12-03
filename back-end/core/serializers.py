@@ -78,6 +78,15 @@ def normalizar_rut(value):
     return f"{cuerpo_normalizado}-{dv}"
 
 
+def normalizar_telefono(value):
+    if value in (None, ""):
+        return None if value == "" else value
+    digits = re.sub(r"[^0-9]", "", str(value))
+    if len(digits) < 7 or len(digits) > 15:
+        raise serializers.ValidationError("El teléfono debe tener entre 7 y 15 dígitos.")
+    return digits
+
+
 class EspecialidadSerializer(serializers.ModelSerializer):
     class Meta:
         model = Especialidad
@@ -127,6 +136,16 @@ class ApoderadoSerializer(serializers.ModelSerializer):
             "ocupacion",
             "escolaridad",
         ]
+
+    def validate_run(self, value):
+        if value in (None, ""):
+            return None if value == "" else value
+        return normalizar_rut(value)
+
+    def validate_telefono(self, value):
+        if value in (None, ""):
+            return None if value == "" else value
+        return normalizar_telefono(value)
 
 
 class UsuarioSerializer(serializers.ModelSerializer):
@@ -185,6 +204,8 @@ class UsuarioSerializer(serializers.ModelSerializer):
                 attrs[field] = self._normalize_bool(attrs[field])
         if attrs.get("telefono") == "":
             attrs["telefono"] = None
+        if attrs.get("telefono"):
+            attrs["telefono"] = normalizar_telefono(attrs["telefono"])
         if attrs.get("rut") == "":
             attrs["rut"] = None
         if attrs.get("rut"):
@@ -318,6 +339,16 @@ class EstudianteSerializer(serializers.ModelSerializer):
             "apoderado_id",
         ]
 
+    def validate_run(self, value):
+        if value in (None, ""):
+            return None if value == "" else value
+        return normalizar_rut(value)
+
+    def validate_telefono(self, value):
+        if value in (None, ""):
+            return None if value == "" else value
+        return normalizar_telefono(value)
+
 
 class InformanteSerializer(serializers.ModelSerializer):
     class Meta:
@@ -339,6 +370,7 @@ class AntecedenteSaludSerializer(serializers.ModelSerializer):
     class Meta:
         model = AntecedenteSalud
         fields = "__all__"
+        read_only_fields = ("pdf_generado",)
         extra_kwargs = {
             "anamnesis": {"required": False, "allow_null": True},
         }

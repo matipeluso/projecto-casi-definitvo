@@ -191,6 +191,7 @@ class AntecedenteSalud(models.Model):
     hospitalizaciones = models.BooleanField(default=False)
     vacunas = models.BooleanField(default=True)
     observaciones = models.TextField(blank=True, null=True)
+    pdf_generado = models.FileField(upload_to='antecedentes_salud/', blank=True, null=True)
 
     def __str__(self):
         return f"Salud de {self.anamnesis.estudiante.nombres_apellidos} ({self.fecha_evaluacion})"

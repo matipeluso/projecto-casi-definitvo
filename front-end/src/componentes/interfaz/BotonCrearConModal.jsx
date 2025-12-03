@@ -132,6 +132,10 @@ export default function BotonCrearConModal({
       <input type="number" inputMode="numeric" {...common} className="form-control" />
     ) : c.type === 'date' ? (
       <input type="date" {...common} className="form-control" />
+    ) : c.type === 'tel' ? (
+      <input type="tel" {...common} className="form-control" />
+    ) : c.type === 'email' ? (
+      <input type="email" {...common} className="form-control" />
     ) : (
       <input type="text" {...common} className="form-control" />
     );

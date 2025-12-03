@@ -3,3 +3,59 @@ body { background: #fff; color: #111; }
 .navbar-brand { font-weight: 600; }
 .table thead th { white-space: nowrap; }
 .badge { font-size: 0.9rem; }
+
+.tabla-estudiantes__wrapper {
+	border: 1px solid #dfe3ec;
+	border-radius: 0.65rem;
+}
+
+.tabla-estudiantes {
+	border-color: #e0e5ef;
+}
+
+.tabla-estudiantes th,
+.tabla-estudiantes td {
+	text-align: center;
+	white-space: nowrap;
+	padding: 0.55rem 0.45rem;
+}
+
+.tabla-estudiantes thead th {
+	text-transform: uppercase;
+	font-size: 0.78rem;
+	letter-spacing: 0.05em;
+	color: #4b566a;
+	background: #f4f6fb;
+	border-bottom: 2px solid #dce2f0 !important;
+}
+
+.tabla-estudiantes tbody td {
+	vertical-align: middle;
+	border-color: #e6e9f2 !important;
+}
+
+.tabla-estudiantes tbody tr:nth-child(2n + 1) {
+	background: #fff;
+}
+
+.tabla-estudiantes tbody tr:nth-child(2n) {
+	background: #fdfdff;
+}
+
+.tabla-estudiantes tbody tr:hover {
+	background: #f2f7ff;
+}
+
+.tabla-estudiantes td small {
+	color: #6c7488;
+}
+
+.tabla-estudiantes .texto-principal {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.tabla-estudiantes__breakable {
+	white-space: normal;
+	text-align: left;
+}

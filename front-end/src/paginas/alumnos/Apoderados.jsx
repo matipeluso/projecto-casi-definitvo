@@ -3,6 +3,7 @@ import { toast } from "react-toastify";
 import Buscar from "../../componentes/interfaz/Buscar";
 import BotonCrearConModal from "../../componentes/interfaz/BotonCrearConModal";
 import BotonEditarConModal from "../../componentes/interfaz/BotonEditarConModal";
+import { useAuth } from "../../contexto/AuthContext";
 import {
   listarApoderados,
   crearApoderado,
@@ -24,6 +25,8 @@ export default function Apoderados() {
   const [busqueda, setBusqueda] = useState("");
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState("");
+  const { user } = useAuth();
+  const soloLecturaProfesional = Boolean(user && !user.is_staff && !user.is_superuser);
 
   async function cargarApoderados() {
     setCargando(true);
@@ -120,9 +123,27 @@ export default function Apoderados() {
 
   const camposFormulario = [
     { name: "nombres_apellidos", label: "Nombre completo", required: true, col: "col-md-6" },
-    { name: "run", label: "RUN", col: "col-md-3" },
-    { name: "telefono", label: "Teléfono", col: "col-md-3" },
-    { name: "correo", label: "Correo", col: "col-md-4" },
+    {
+      name: "run",
+      label: "RUN",
+      col: "col-md-3",
+      attrs: {
+        pattern: "^[0-9kK.-]+$",
+        title: "Use solo números, puntos, guion y dígito verificador.",
+      },
+    },
+    {
+      name: "telefono",
+      label: "Teléfono",
+      col: "col-md-3",
+      type: "tel",
+      attrs: {
+        pattern: "^[0-9]{7,15}$",
+        inputMode: "numeric",
+        title: "Ingrese solo dígitos (7 a 15).",
+      },
+    },
+    { name: "correo", label: "Correo", col: "col-md-4", type: "email" },
     { name: "direccion", label: "Dirección", col: "col-md-8" },
     { name: "parentesco", label: "Parentesco", col: "col-md-4" },
     { name: "ocupacion", label: "Ocupación", col: "col-md-4" },
@@ -176,17 +197,17 @@ export default function Apoderados() {
               <th>Correo</th>
               <th>Parentesco</th>
               <th>Ocupación</th>
-              <th className="text-end">Acciones</th>
+              {!soloLecturaProfesional && <th className="text-end">Acciones</th>}
             </tr>
           </thead>
           <tbody>
             {cargando ? (
               <tr>
-                <td colSpan={7} className="text-center">Cargando…</td>
+                <td colSpan={soloLecturaProfesional ? 6 : 7} className="text-center">Cargando…</td>
               </tr>
             ) : filtrados.length === 0 ? (
               <tr>
-                <td colSpan={7} className="text-center text-muted">No hay apoderados registrados.</td>
+                <td colSpan={soloLecturaProfesional ? 6 : 7} className="text-center text-muted">No hay apoderados registrados.</td>
               </tr>
             ) : (
               filtrados.map((apo) => (
@@ -197,36 +218,38 @@ export default function Apoderados() {
                   <td>{apo.correo || "—"}</td>
                   <td>{apo.parentesco || "—"}</td>
                   <td>{apo.ocupacion || "—"}</td>
-                  <td className="text-end">
-                    <div className="d-inline-flex gap-2">
-                      <BotonEditarConModal
-                        registro={{
-                          nombres_apellidos: apo.nombres_apellidos ?? "",
-                          run: apo.run ?? "",
-                          telefono: apo.telefono ?? "",
-                          correo: apo.correo ?? "",
-                          direccion: apo.direccion ?? "",
-                          parentesco: apo.parentesco ?? "",
-                          ocupacion: apo.ocupacion ?? "",
-                          escolaridad: apo.escolaridad ?? "",
-                        }}
-                        titulo="Editar apoderado"
-                        textoBoton="Editar"
-                        icono="bi-pencil-square"
-                        className="btn btn-sm btn-outline-primary"
-                        campos={camposFormulario}
-                        transformarValores={transformarPayload}
-                        onGuardar={(payload) => handleActualizar(apo.id, payload)}
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-danger"
-                        onClick={() => handleEliminar(apo.id)}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </td>
+                  {!soloLecturaProfesional && (
+                    <td className="text-end">
+                      <div className="d-inline-flex gap-2">
+                        <BotonEditarConModal
+                          registro={{
+                            nombres_apellidos: apo.nombres_apellidos ?? "",
+                            run: apo.run ?? "",
+                            telefono: apo.telefono ?? "",
+                            correo: apo.correo ?? "",
+                            direccion: apo.direccion ?? "",
+                            parentesco: apo.parentesco ?? "",
+                            ocupacion: apo.ocupacion ?? "",
+                            escolaridad: apo.escolaridad ?? "",
+                          }}
+                          titulo="Editar apoderado"
+                          textoBoton="Editar"
+                          icono="bi-pencil-square"
+                          className="btn btn-sm btn-outline-primary"
+                          campos={camposFormulario}
+                          transformarValores={transformarPayload}
+                          onGuardar={(payload) => handleActualizar(apo.id, payload)}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => handleEliminar(apo.id)}
+                        >
+                          Eliminar
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))
             )}

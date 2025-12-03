@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { crearAntecedenteSalud, actualizarAntecedenteSalud } from '../../servicios/salud';
-import { listarEstudiantes } from '../../servicios/estudiantes';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { crearAntecedenteSalud, actualizarAntecedenteSalud, descargarPdfAntecedenteSalud } from '../../servicios/salud';
+import { listarEstudiantes, obtenerEstudiante } from '../../servicios/estudiantes';
 import { listarCursos } from '../../servicios/cursos';
 import { Alert } from 'react-bootstrap';
 import { useAuth } from '../../contexto/AuthContext';
@@ -13,8 +14,21 @@ const TIPO_PARTO_OPCIONES = [
   { value: 'No especifica', label: 'No especifica' },
 ];
 
+function saveBlobAsFile(blob, filename) {
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+}
+
 const SaludForm = ({ modo = 'crear', antecedente = null, anamnesisId }) => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [cursos, setCursos] = useState([]);
   const [cargandoCursos, setCargandoCursos] = useState(false);
   const [cursoSeleccionado, setCursoSeleccionado] = useState(
@@ -23,6 +37,8 @@ const SaludForm = ({ modo = 'crear', antecedente = null, anamnesisId }) => {
   const [estudiantes, setEstudiantes] = useState([]);
   const [cargandoEstudiantes, setCargandoEstudiantes] = useState(false);
   const [alerta, setAlerta] = useState({ show: false, mensaje: '', variante: 'success' });
+  const [guardando, setGuardando] = useState(false);
+  const [generandoPdf, setGenerandoPdf] = useState(false);
   const [form, setForm] = useState({
     anamnesis: anamnesisId || '',
     estudiante_id: antecedente?.anamnesis?.estudiante?.id || '',
@@ -100,6 +116,31 @@ const SaludForm = ({ modo = 'crear', antecedente = null, anamnesisId }) => {
     cargarEstudiantes();
   }, [cursoSeleccionado]);
 
+  useEffect(() => {
+    const estudianteQuery = searchParams.get('estudiante');
+    if (!estudianteQuery || antecedente) return;
+    let cancelado = false;
+    const precargar = async () => {
+      try {
+        const { data } = await obtenerEstudiante(estudianteQuery);
+        if (cancelado) return;
+        if (data?.curso?.id) {
+          setCursoSeleccionado(String(data.curso.id));
+        }
+        setForm((prev) => ({
+          ...prev,
+          estudiante_id: data?.id ? String(data.id) : prev.estudiante_id,
+        }));
+      } catch (error) {
+        console.error('[SaludForm] Error precargando estudiante', error);
+      }
+    };
+    precargar();
+    return () => {
+      cancelado = true;
+    };
+  }, [antecedente, searchParams]);
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     if (name === 'curso_id') {
@@ -119,6 +160,7 @@ const SaludForm = ({ modo = 'crear', antecedente = null, anamnesisId }) => {
       setAlerta({ show: true, mensaje: 'Debes seleccionar un curso y un estudiante antes de guardar.', variante: 'warning' });
       return;
     }
+    setGuardando(true);
     try {
       const payload = { ...form };
       if (!payload.anamnesis) delete payload.anamnesis;
@@ -127,15 +169,43 @@ const SaludForm = ({ modo = 'crear', antecedente = null, anamnesisId }) => {
       payload.especialidad = user?.especialidad?.nombre || 'Sin especialidad';
       payload.rut_profesional = user?.rut || form.rut_profesional || '';
       payload.cargo_profesional = user?.cargo || form.cargo_profesional || payload.especialidad;
+      const toNullIfEmpty = (value) => (value === '' || value === undefined ? null : value);
+      ['peso', 'talla'].forEach((campo) => {
+        payload[campo] = toNullIfEmpty(payload[campo]);
+      });
+      ['fecha_evaluacion', 'fecha_reevaluacion'].forEach((campo) => {
+        payload[campo] = toNullIfEmpty(payload[campo]);
+      });
+      let registro;
       if (modo === 'crear') {
-        await crearAntecedenteSalud(payload);
-        setAlerta({ show: true, mensaje: 'Registro creado exitosamente.', variante: 'success' });
+        registro = await crearAntecedenteSalud(payload);
+        setAlerta({ show: true, mensaje: 'Registro creado. Generando PDF…', variante: 'success' });
       } else {
-        await actualizarAntecedenteSalud(antecedente.id, payload);
-        setAlerta({ show: true, mensaje: 'Registro actualizado exitosamente.', variante: 'success' });
+        registro = await actualizarAntecedenteSalud(antecedente.id, payload);
+        setAlerta({ show: true, mensaje: 'Registro actualizado. Generando PDF…', variante: 'success' });
+      }
+      if (registro?.id) {
+        await descargarYGuardarPdf(registro.id);
+        navigate('/estudiantes', { replace: true });
       }
     } catch (error) {
       setAlerta({ show: true, mensaje: 'Error al guardar: ' + (error.response?.data?.detail || error.message), variante: 'danger' });
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  const descargarYGuardarPdf = async (registroId) => {
+    setGenerandoPdf(true);
+    try {
+      const blob = await descargarPdfAntecedenteSalud(registroId);
+      saveBlobAsFile(blob, `evaluacion_salud_${registroId}.pdf`);
+      setAlerta({ show: true, mensaje: 'PDF generado correctamente.', variante: 'success' });
+    } catch (error) {
+      console.error('[SaludForm] Error al descargar PDF', error);
+      setAlerta({ show: true, mensaje: 'El registro se guardó pero no se pudo descargar el PDF.', variante: 'warning' });
+    } finally {
+      setGenerandoPdf(false);
     }
   };
 
@@ -285,7 +355,9 @@ const SaludForm = ({ modo = 'crear', antecedente = null, anamnesisId }) => {
         <label>Indicaciones</label>
         <textarea className="form-control" name="indicaciones" value={form.indicaciones} onChange={handleChange} />
       </div>
-      <button type="submit" className="btn btn-primary">Guardar</button>
+      <button type="submit" className="btn btn-primary" disabled={guardando || generandoPdf}>
+        {guardando || generandoPdf ? 'Generando PDF…' : 'Guardar y generar PDF'}
+      </button>
       {alerta.show && <Alert variant={alerta.variante} className="mt-3">{alerta.mensaje}</Alert>}
     </form>
   );

@@ -1673,6 +1673,161 @@ def _write_pdf_to_disk(buffer, path):
     buffer.close()
 
 
+def generar_pdf_antecedente_salud(antecedente):
+    if not antecedente:
+        return None
+
+    folder_path = _ensure_folder("antecedentes_salud")
+    filename = f"evaluacion_salud_{antecedente.id}.pdf"
+    file_path = os.path.join(folder_path, filename)
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=20 * mm,
+        rightMargin=20 * mm,
+        topMargin=30 * mm,
+        bottomMargin=20 * mm,
+    )
+
+    styles = getSampleStyleSheet()
+    styles.add(
+        ParagraphStyle(
+            name="SaludTitle",
+            parent=styles["Title"],
+            alignment=1,
+            textColor=colors.HexColor("#0b4f6c"),
+            fontSize=18,
+            leading=22,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="SectionHeader",
+            parent=styles["Heading3"],
+            textColor=colors.HexColor("#0f6eb6"),
+            fontSize=11,
+            spaceBefore=12,
+            spaceAfter=6,
+        )
+    )
+    styles.add(
+        ParagraphStyle(
+            name="SmallText",
+            parent=styles["BodyText"],
+            fontSize=9,
+            leading=12,
+        )
+    )
+
+    estudiante = None
+    curso = None
+    establecimiento = None
+    if antecedente.anamnesis and antecedente.anamnesis.estudiante:
+        estudiante = antecedente.anamnesis.estudiante
+        curso = getattr(estudiante, "curso", None)
+        establecimiento = getattr(estudiante, "establecimiento", None) or getattr(curso, "establecimiento", None)
+
+    profesional_nombre = None
+    if antecedente.profesional:
+        full_name = antecedente.profesional.get_full_name().strip()
+        profesional_nombre = full_name or antecedente.profesional.username
+
+    def _fmt_value(value, suffix=""):
+        if value in (None, ""):
+            return "—"
+        if suffix:
+            return f"{value} {suffix}".strip()
+        return str(value)
+
+    story = []
+    story.append(Paragraph("Formulario de Evaluación de Salud", styles["SaludTitle"]))
+    story.append(Spacer(1, 6))
+    story.append(
+        Paragraph(
+            f"Generado el {_format_date(timezone.localtime(timezone.now()))}",
+            styles["SmallText"],
+        )
+    )
+    story.append(Spacer(1, 6))
+
+    datos_estudiante = [
+        ("Estudiante", _format_text(getattr(estudiante, "nombres_apellidos", None))),
+        ("RUN", _format_text(getattr(estudiante, "run", None))),
+        ("Curso", _format_text(getattr(curso, "nombre", None))),
+        ("Establecimiento", _format_text(getattr(establecimiento, "nombre", None))),
+    ]
+    base_table_style = TableStyle(
+        [
+            ("BACKGROUND", (0, 0), (0, -1), colors.HexColor("#e3eef6")),
+            ("BOX", (0, 0), (-1, -1), 0.25, colors.gray),
+            ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.lightgrey),
+        ]
+    )
+
+    info_table = Table(
+        [[Paragraph(label, styles["SmallText"]), Paragraph(valor, styles["SmallText"])] for label, valor in datos_estudiante],
+        colWidths=[45 * mm, 110 * mm],
+        hAlign="LEFT",
+    )
+    info_table.setStyle(base_table_style)
+    story.append(info_table)
+
+    story.append(Paragraph("Identificación del profesional", styles["SectionHeader"]))
+    profesional_table = Table(
+        [
+            ("Profesional", _format_text(profesional_nombre)),
+            ("RUT", _format_text(antecedente.rut_profesional)),
+            ("Cargo", _format_text(antecedente.cargo_profesional)),
+            ("Especialidad", _format_text(antecedente.especialidad)),
+            ("Procedencia", _format_text(antecedente.procedencia)),
+            ("Contacto", _format_text(antecedente.contacto)),
+        ],
+        colWidths=[45 * mm, 110 * mm],
+        hAlign="LEFT",
+    )
+    profesional_table.setStyle(base_table_style)
+    story.append(profesional_table)
+
+    story.append(Paragraph("Datos clínicos", styles["SectionHeader"]))
+    datos_clinicos = [
+        ("Motivo de consulta", _format_text(antecedente.motivo_consulta)),
+        ("Fecha evaluación", _format_text(_format_date(antecedente.fecha_evaluacion))),
+        ("Fecha reevaluación", _format_text(_format_date(antecedente.fecha_reevaluacion))),
+        ("Diagnóstico previo", _format_text(antecedente.diagnostico_prev)),
+        ("Tipo de parto", _format_text(antecedente.tipo_parto)),
+        ("Asistencia parto", _bool_text(antecedente.asistencia_parto)),
+        ("Peso", _fmt_value(antecedente.peso, "kg")),
+        ("Talla", _fmt_value(antecedente.talla, "cm")),
+        ("Hospitalizaciones", _bool_text(antecedente.hospitalizaciones)),
+        ("Vacunas al día", _bool_text(antecedente.vacunas)),
+        ("Antecedentes de embarazo", _format_text(antecedente.antecedentes_embarazo)),
+    ]
+    clinicos_table = Table(
+        [[Paragraph(label, styles["SmallText"]), Paragraph(valor, styles["SmallText"])] for label, valor in datos_clinicos],
+        colWidths=[55 * mm, 100 * mm],
+    )
+    clinicos_table.setStyle(base_table_style)
+    story.append(clinicos_table)
+
+    story.append(Paragraph("Estado y observaciones", styles["SectionHeader"]))
+    story.append(Paragraph(_format_text(antecedente.estado_salud_general), styles["SmallText"]))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph("Descripción diagnóstica", styles["SectionHeader"]))
+    story.append(Paragraph(_format_text(antecedente.descripcion_diagnostico), styles["SmallText"]))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph("Indicaciones", styles["SectionHeader"]))
+    story.append(Paragraph(_format_text(antecedente.indicaciones), styles["SmallText"]))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph("Observaciones", styles["SectionHeader"]))
+    story.append(Paragraph(_format_text(antecedente.observaciones), styles["SmallText"]))
+
+    doc.build(story)
+    _write_pdf_to_disk(buffer, file_path)
+    return os.path.join("antecedentes_salud", filename)
+
+
 def generar_pdf_evaluacion_psicopedagogica(evaluacion):
     """Genera un informe detallado, con secciones firmables, para la evaluación psicopedagógica."""
 

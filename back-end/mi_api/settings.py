@@ -49,7 +49,7 @@ WSGI_APPLICATION = 'mi_api.wsgi.application'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'build')],   # 👈 AQUI VA EL BUILD
+        'DIRS': [],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -69,7 +69,7 @@ STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, 'build', 'static'),   # 👈 JS, CSS del build
+    os.path.join(BASE_DIR, 'static'),
 ]
 
 # =============================
@@ -80,7 +80,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'nee',
         'USER': 'root',
-        'PASSWORD': 'admin12345',
+        'PASSWORD': 'Codaw2002-.',
         'HOST': 'localhost',
         'PORT': '3306',
     }
@@ -107,22 +107,25 @@ USE_I18N = True
 USE_TZ = True
 
 # ======================================================
-# STATIC FILES + BUILD DE REACT
-# ======================================================
-
-STATIC_URL = "/static/"
-
-STATICFILES_DIRS = [
-    os.path.join(BASE_DIR, "build", "static"),  # del build de React
-]
-
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
-
-# ======================================================
 # USER CUSTOM
 # ======================================================
 
 AUTH_USER_MODEL = "core.Usuario"
+
+# ======================================================
+# CORS / CSRF (frontend en localhost:3000)
+# ======================================================
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
 
 # ======================================================
 # EMAIL
@@ -133,5 +136,5 @@ EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = "gestioncontra12@gmail.com"
-EMAIL_HOST_PASSWORD = "xwmq hsmc rmmw mbuz"
+EMAIL_HOST_PASSWORD = "wgio gjah cnhw drmr"
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER

@@ -4,6 +4,10 @@ export function listarEstudiantes(params = {}) {
   return api.get("/estudiantes/", { params });
 }
 
+export function obtenerEstudiante(id) {
+  return api.get(`/estudiantes/${id}/`);
+}
+
 export function crearEstudiante(payload) {
   return api.post("/estudiantes/", payload);
 }
